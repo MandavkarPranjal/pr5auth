@@ -2,9 +2,9 @@ import type { ElectrobunConfig } from "electrobun";
 
 export default {
 	app: {
-		name: "tailwind-vanilla",
-		identifier: "tailwindvanilla.electrobun.dev",
-		version: "0.0.1",
+		name: "PR5Auth",
+		identifier: "pr5auth.electrobun.dev",
+		version: "0.1.0",
 	},
 	build: {
 		copy: {

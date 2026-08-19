@@ -22,14 +22,14 @@ async function getMainViewUrl(): Promise<string> {
 const url = await getMainViewUrl();
 
 const mainWindow = new BrowserWindow({
-	title: "Tailwind + Vanilla",
+	title: "PR5Auth",
 	url,
 	frame: {
-		width: 900,
-		height: 700,
+		width: 1200,
+		height: 800,
 		x: 200,
 		y: 200,
 	},
 });
 
-console.log("Tailwind Vanilla app started!");
+console.log("PR5Auth started!");
