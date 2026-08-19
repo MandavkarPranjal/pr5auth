@@ -121,15 +121,17 @@ export default function App() {
 		(uri: string) => {
 			const parsed = parseOtpauthUri(uri);
 			if (!parsed) return false;
-			setModalPrefill({
-				issuer: parsed.issuer,
-				accountName: parsed.accountName,
-				secret: parsed.secret,
-			});
-			setModalOpen(true);
+			void addAccount(parsed)
+				.then(() => notify("success", `Added ${parsed.issuer}`))
+				.catch((err: unknown) => {
+					notify(
+						"error",
+						err instanceof Error ? err.message : "Failed to save account",
+					);
+				});
 			return true;
 		},
-		[],
+		[addAccount, notify],
 	);
 
 	const handleImportVault = useCallback(

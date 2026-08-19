@@ -1,5 +1,5 @@
 import { useRef, useState, type DragEvent } from "react";
-import { Camera, Check, ImageUp, Link2, Loader2, ScanLine, X } from "lucide-react";
+import { Check, ImageUp, Link2, Loader2, X } from "lucide-react";
 import { parseOtpauthUri } from "../services/accountService";
 import { decodeQrFromFile } from "../services/qr";
 
@@ -122,31 +122,6 @@ export function ImportQR({ onAddParsed, onOpenModal }: ImportQRProps) {
 							{imageError}
 						</p>
 					)}
-
-					{/* Camera scan placeholder — native capture will replace this in a future release */}
-					<div className="relative overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02] p-6">
-						<div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-							<div className="animate-scan absolute inset-x-8 h-px bg-gradient-to-r from-transparent via-indigo-400/80 to-transparent" />
-						</div>
-						<div className="flex items-center gap-4">
-							<div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.04]">
-								<Camera className="h-5 w-5 text-slate-500" />
-							</div>
-							<div>
-								<p className="text-sm font-medium text-slate-300">
-									Scan with camera
-								</p>
-								<p className="mt-0.5 text-xs leading-relaxed text-slate-500">
-									Coming soon — the scanner will use your device camera to
-									capture secrets instantly.
-								</p>
-							</div>
-							<span className="ml-auto rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-								Soon
-							</span>
-						</div>
-						<ScanLine className="absolute right-6 top-6 h-4 w-4 text-slate-700" />
-					</div>
 				</section>
 
 				<section className="space-y-6">

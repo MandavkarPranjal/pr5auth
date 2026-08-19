@@ -59,36 +59,12 @@ textarea {
 	}
 }
 
-@keyframes scan {
-	0% {
-		top: 12%;
-		opacity: 0;
-	}
-	15% {
-		opacity: 1;
-	}
-	50% {
-		opacity: 1;
-	}
-	85% {
-		opacity: 1;
-	}
-	100% {
-		top: 88%;
-		opacity: 0;
-	}
-}
-
 .animate-modal-in {
 	animation: modal-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .animate-toast-in {
 	animation: toast-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.animate-scan {
-	animation: scan 2.6s ease-in-out infinite;
 }
 
 /* ---- scrollbar ---- */
