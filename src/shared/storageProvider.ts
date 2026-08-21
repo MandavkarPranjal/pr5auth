@@ -40,7 +40,7 @@ export interface StorageStatusProvider {
 
 export function isStorageStatusProvider(
 	value: unknown,
-): value is StorageProvider & StorageStatusProvider {
+): value is StorageStatusProvider {
 	return (
 		typeof value === "object" &&
 		value !== null &&
