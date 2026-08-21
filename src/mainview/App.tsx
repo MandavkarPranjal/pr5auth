@@ -47,6 +47,14 @@ export default function App() {
 
 	const accountsRef = useRef<Account[]>([]);
 	accountsRef.current = accounts;
+	const lockedRef = useRef(locked);
+	const vaultLoadingRef = useRef(vaultLoading);
+	useEffect(() => {
+		lockedRef.current = locked;
+	}, [locked]);
+	useEffect(() => {
+		vaultLoadingRef.current = vaultLoading;
+	}, [vaultLoading]);
 
 	const notify = useCallback((kind: ToastItem["kind"], message: string) => {
 		const id = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -102,9 +110,14 @@ export default function App() {
 				}
 			})
 			.catch((err: unknown) => {
-				// Don't show settings error when vault is locked – settings are encrypted
+				// Don't show settings error when vault is locked – settings are encrypted.
+				// Use refs so the async rejection reads the current lock state instead
+				// of the stale `locked` closure from the initial render. On boot a
+				// password-protected vault is already locked, but `locked` is still
+				// false until the vault-status effect resolves, so the closure check
+				// would spuriously toast "Vault is locked...".
 				const msg = err instanceof Error ? err.message : String(err);
-				if (/locked|denied/i.test(msg) && locked) return;
+				if (/locked|denied/i.test(msg) && (lockedRef.current || vaultLoadingRef.current)) return;
 				if (!cancelled) {
 					notify(
 						"error",

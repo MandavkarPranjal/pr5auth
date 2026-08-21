@@ -1,6 +1,7 @@
 import { BrowserView, BrowserWindow, Tray, Updater, Utils } from "electrobun/bun";
 import Electrobun from "electrobun/bun";
 import type { SecureStorageSchema } from "../shared/rpcSchema";
+import { StorageError } from "../shared/storageProvider";
 import { createSecureStorageBackend } from "./secureStorage";
 import { buildTrayMenu, formatTrayTitle } from "./tray";
 import { SETTINGS_KEY, VAULT_KEY } from "../shared/storageProvider";
@@ -145,7 +146,7 @@ const rpc = BrowserView.defineRPC<SecureStorageSchema>({
 			},
 			"vault:status": async () => {
 				const vm = getVaultManager()
-				if (!vm) return { hasPassword: false, isLocked: false }
+				if (!vm) throw new StorageError("Vault unavailable — key storage backends unavailable", "unavailable")
 				return vm.getStatus()
 			},
 			"vault:createPassword": async ({ password }) =>
