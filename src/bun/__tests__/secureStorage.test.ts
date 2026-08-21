@@ -28,6 +28,9 @@ afterEach(async () => {
 class TestKeyStorage implements KeyStorage {
 	readonly kind = "file-encrypted" as const
 	readonly detail = "test key"
+	async findKey(): Promise<Uint8Array | null> {
+		return new Uint8Array(32).fill(7)
+	}
 	async getKey(): Promise<Uint8Array> {
 		return new Uint8Array(32).fill(7)
 	}
@@ -94,13 +97,24 @@ describe("EncryptedFileStorageProvider", () => {
 		expect(raw).not.toContain("pr5auth.vault")
 	})
 
+	it("overwrites atomically without leaving temp files", async () => {
+		const dir = await makeTempDir()
+		const provider = new EncryptedFileStorageProvider(dir, new TestKeyStorage())
+		await provider.setItem(VAULT_KEY, "first")
+		await provider.setItem(VAULT_KEY, "second")
+		const files = await readdir(dir)
+		expect(files).toHaveLength(1)
+		expect(files[0]).toEndWith(".enc")
+		expect(await provider.getItem(VAULT_KEY)).toBe("second")
+	})
+
 	it("reports corruption as StorageError", async () => {
 		const dir = await makeTempDir()
 		const provider = new EncryptedFileStorageProvider(dir, new TestKeyStorage())
 		await provider.setItem(VAULT_KEY, "data")
 		const files = await readdir(dir)
 		await writeFile(path.join(dir, files[0]), "garbage", "utf8")
-		expect(provider.getItem(VAULT_KEY)).rejects.toThrow(StorageError)
+		await expect(provider.getItem(VAULT_KEY)).rejects.toThrow(StorageError)
 	})
 
 	it("removes an item", async () => {

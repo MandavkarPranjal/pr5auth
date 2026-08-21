@@ -105,17 +105,20 @@ export interface VaultFile {
 	accounts: Account[];
 }
 
-export function serializeVault(
-	accounts: Account[],
-	exportedAt = new Date().toISOString(),
-): string {
-	const payload: VaultFile = {
+function buildVaultFile(accounts: Account[], exportedAt: string): VaultFile {
+	return {
 		app: "PR5Auth",
 		version: VAULT_SCHEMA_VERSION,
 		exportedAt,
 		accounts,
 	};
-	return JSON.stringify(payload);
+}
+
+export function serializeVault(
+	accounts: Account[],
+	exportedAt = new Date().toISOString(),
+): string {
+	return JSON.stringify(buildVaultFile(accounts, exportedAt));
 }
 
 export function deserializeVault(json: string): Account[] | null {
@@ -130,20 +133,18 @@ export function deserializeVault(json: string): Account[] | null {
 			return null;
 		}
 		const accounts = candidate.accounts.filter(isValidAccount);
-		return accounts.length > 0 ? accounts : null;
+		return accounts;
 	} catch {
 		return null;
 	}
 }
 
 export function exportVault(accounts: Account[]): string {
-	const payload: VaultFile = {
-		app: "PR5Auth",
-		version: VAULT_SCHEMA_VERSION,
-		exportedAt: new Date().toISOString(),
-		accounts,
-	};
-	return JSON.stringify(payload, null, 2);
+	return JSON.stringify(
+		buildVaultFile(accounts, new Date().toISOString()),
+		null,
+		2,
+	);
 }
 
 export function parseVaultImport(json: string): Account[] {
