@@ -3,7 +3,7 @@ import {
 	createDecipheriv,
 	randomBytes,
 } from "node:crypto"
-import { chmod, mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises"
+import { chmod, mkdir, readdir, readFile, rename, unlink, writeFile } from "node:fs/promises"
 import { platform } from "node:os"
 import path from "node:path"
 import {
@@ -169,10 +169,13 @@ export class EncryptedFileStorageProvider implements StorageProvider {
 		}
 		const payload = encrypt(value, k)
 		const file = this.filePath(key)
+		const tempFile = `${file}.${randomBytes(8).toString("hex")}.tmp`
 		try {
-			await writeFile(file, payload, { mode: FILE_MODE })
-			await chmod(file, FILE_MODE)
+			await writeFile(tempFile, payload, { mode: FILE_MODE })
+			await chmod(tempFile, FILE_MODE)
+			await rename(tempFile, file)
 		} catch (err) {
+			await unlink(tempFile).catch(() => {})
 			throw new StorageError(
 				`Could not write vault file: ${(err as Error).message}`,
 				"io",

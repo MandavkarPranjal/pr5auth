@@ -236,6 +236,7 @@ class DpapiKeyStorage implements KeyStorage {
 		const existing = await this.findKey()
 		if (existing) return existing
 
+		const script = await this.ensureScript()
 		const key = randomBytes(KEY_SIZE)
 		const write = await run(
 			"powershell.exe",
@@ -376,7 +377,7 @@ class WindowsKeyStorage implements KeyStorage {
 		return this.scriptPath
 	}
 
-	async getKey(): Promise<Uint8Array> {
+	async findKey(): Promise<Uint8Array | null> {
 		const script = await this.ensureScript()
 		const read = await run("powershell.exe", [
 			"-NoProfile",
@@ -390,11 +391,21 @@ class WindowsKeyStorage implements KeyStorage {
 			"-Target",
 			WINDOWS_TARGET,
 		])
-		if (read.code === 0) {
-			const existing = decodeKeyHex(read.stdout)
-			if (existing) return existing
+		if (read.code !== 0) return null
+		const existing = decodeKeyHex(read.stdout)
+		if (!existing) {
+			throw new StorageBackendUnavailableError(
+				"Windows Credential Manager entry is malformed",
+			)
 		}
+		return existing
+	}
 
+	async getKey(): Promise<Uint8Array> {
+		const existing = await this.findKey()
+		if (existing) return existing
+
+		const script = await this.ensureScript()
 		const key = randomBytes(KEY_SIZE)
 		const write = await run(
 			"powershell.exe",
@@ -425,7 +436,7 @@ class LinuxKeyStorage implements KeyStorage {
 	readonly kind = "os-keychain" as const
 	readonly detail = "Secret Service (secret-tool)"
 
-	async getKey(): Promise<Uint8Array> {
+	async findKey(): Promise<Uint8Array | null> {
 		const lookup = await run("secret-tool", [
 			"lookup",
 			"service",
@@ -433,15 +444,24 @@ class LinuxKeyStorage implements KeyStorage {
 			"account",
 			ACCOUNT,
 		])
-		if (lookup.code === 0) {
-			const existing = decodeKeyHex(lookup.stdout)
-			if (existing) return existing
-		}
 		if (this.serviceUnavailable(lookup)) {
 			throw new StorageBackendUnavailableError(
 				"Secret Service is not available on this system",
 			)
 		}
+		if (lookup.code !== 0) return null
+		const existing = decodeKeyHex(lookup.stdout)
+		if (!existing) {
+			throw new StorageBackendUnavailableError(
+				"Secret Service entry is malformed",
+			)
+		}
+		return existing
+	}
+
+	async getKey(): Promise<Uint8Array> {
+		const existing = await this.findKey()
+		if (existing) return existing
 
 		const key = randomBytes(KEY_SIZE)
 		const store = await run(
@@ -476,6 +496,10 @@ class MachineIdKeyStorage implements KeyStorage {
 	readonly kind = "file-encrypted" as const
 	readonly detail = "Key derived from machine-id (Linux fallback)"
 
+	async findKey(): Promise<Uint8Array | null> {
+		return null
+	}
+
 	async getKey(): Promise<Uint8Array> {
 		const machineId = await this.readMachineId()
 		return new Uint8Array(
@@ -496,6 +520,15 @@ class MachineIdKeyStorage implements KeyStorage {
 	}
 }
 
+async function hasVaultData(dataDir: string): Promise<boolean> {
+	try {
+		const entries = await readdir(dataDir)
+		return entries.some((entry) => entry.endsWith(".enc"))
+	} catch {
+		return false
+	}
+}
+
 export async function createKeyStorage(dataDir: string): Promise<KeyStorage> {
 	const current = platform()
 
@@ -512,6 +545,29 @@ export async function createKeyStorage(dataDir: string): Promise<KeyStorage> {
 	}
 
 	let lastError: unknown = null
+	for (const candidate of candidates) {
+		try {
+			const existing = await candidate.findKey()
+			if (existing) {
+				console.log(
+					`[keychain] Using ${candidate.kind} (${candidate.detail})`,
+				)
+				return candidate
+			}
+		} catch (err) {
+			lastError = err
+			console.warn(
+				`[keychain] ${candidate.detail} unavailable: ${(err as Error).message}`,
+			)
+		}
+	}
+
+	if (await hasVaultData(dataDir)) {
+		throw new StorageBackendUnavailableError(
+			"Existing vault data found but no key storage backend could provide its key; refusing to create a new key",
+		)
+	}
+
 	for (const candidate of candidates) {
 		try {
 			await candidate.getKey()
