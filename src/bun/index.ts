@@ -176,22 +176,24 @@ try {
 			return;
 		}
 		if (action === "lock") {
-			// Send lock message to webview if window exists
-			try {
-				if (mainWindow?.webview) {
-					// Use RPC message: webview messages are sent via webview.sendMessage?
-					// BrowserView messages: send via socket
-					// Fallback: try multiple methods
-					const view: unknown = mainWindow.webview;
+			// Restore or recreate the window before dispatching lock so the
+			// newly created webview receives the message in a locked state.
+			restoreWindow();
+			const sendLock = () => {
+				try {
+					// Prefer typed RPC message (bun -> webview)
 					if (
-						view &&
-						typeof (view as { sendMessage?: unknown }).sendMessage === "function"
+						rpc &&
+						typeof (rpc as unknown as { send?: unknown }).send === "object"
 					) {
-						(view as { sendMessage: (msg: unknown) => void }).sendMessage({
-							id: "tray:lock",
-							payload: undefined,
-						});
-					} else if (
+						const send = (rpc as unknown as { send: Record<string, (p?: unknown) => void> }).send;
+						if (typeof send["tray:lock"] === "function") {
+							send["tray:lock"]();
+						}
+					}
+					// Fallback: direct JS dispatch for immediate effect and for tests
+					const view: unknown = mainWindow?.webview;
+					if (
 						view &&
 						typeof (view as { executeJavascript?: unknown }).executeJavascript ===
 							"function"
@@ -200,14 +202,13 @@ try {
 							"window.dispatchEvent(new CustomEvent('pr5auth:lock'))",
 						);
 					}
+				} catch (e) {
+					console.warn("Failed to send lock message", e);
 				}
-				// Ensure window is visible and then lock
-				restoreWindow();
-				// Also try direct dispatch via BrowserView messaging if available
-				// The message will be handled in renderer via Electroview RPC handler
-			} catch (e) {
-				console.warn("Failed to send lock message", e);
-			}
+			};
+			sendLock();
+			// Retry once after the new window's webview finishes loading
+			setTimeout(sendLock, 600);
 			return;
 		}
 		if (action === "quit") {
