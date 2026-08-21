@@ -206,14 +206,14 @@ export class VaultStorage {
 
 		const migrated: string[] = []
 		if (legacyVault !== null) {
-			const existing = await this.provider.getItem(VAULT_KEY).catch(() => null)
+			const existing = await this.provider.getItem(VAULT_KEY)
 			if (existing === null) {
 				await this.provider.setItem(VAULT_KEY, legacyVault)
 			}
 			migrated.push(VAULT_KEY)
 		}
 		if (legacySettings !== null) {
-			const existing = await this.provider.getItem(SETTINGS_KEY).catch(() => null)
+			const existing = await this.provider.getItem(SETTINGS_KEY)
 			if (existing === null) {
 				await this.provider.setItem(SETTINGS_KEY, legacySettings)
 			}
