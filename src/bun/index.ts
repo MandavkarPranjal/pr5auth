@@ -249,7 +249,7 @@ try {
 	if (ee && typeof ee.on === "function") {
 		ee.on("before-quit", (event: unknown) => {
 			if (isForceQuitting) return;
-			if ((closeToTray || minimizeToTray) && tray) {
+			if (closeToTray && tray) {
 				(event as { response: { allow: boolean } }).response = { allow: false };
 			}
 		});
