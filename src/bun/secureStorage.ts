@@ -436,12 +436,14 @@ export async function createSecureStorageBackend(): Promise<
 		fallback = new EncryptedFileStorageProvider(dataDir, keyStorage)
 	} catch (err) {
 		console.warn("[storage] Fallback key storage unavailable:", err)
-		// If vault has password, fallback is not needed – we can still operate via VaultManager
-		const vmStatus = await vaultManager.getStatus().catch(() => ({ hasPassword: false, isLocked: false }))
-		if (!vmStatus.hasPassword) {
-			console.error("[storage] Encrypted storage unavailable, falling back to error provider:", err)
-			return new UnavailableStorageProvider(err instanceof Error ? err.message : String(err))
-		}
+		// Preserve VaultManager for password-only bootstrap even when OS
+		// keychain backends are unavailable. Without this, a new install
+		// would report an unlocked no-password vault via getVaultManager()
+		// missing, but vault:createPassword would fail behind
+		// UnavailableStorageProvider. VaultLockedStorageProvider with
+		// fallback=null reports storage unavailable until a password is
+		// created, at which point Argon2-derived keys bootstrap storage.
+		fallback = null
 	}
 	return new VaultLockedStorageProvider(dataDir, vaultManager, fallback)
 }
