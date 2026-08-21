@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, unlink, chmod } from "node:fs/promises"
+import { mkdir, readdir, readFile, writeFile, unlink, chmod } from "node:fs/promises"
 import path from "node:path"
 import { StorageError } from "../shared/storageProvider"
 import {
@@ -226,12 +226,57 @@ export class VaultManager {
 	}
 
 	async reset(): Promise<void> {
-		// Clear vault meta and lock
+		// Delete encrypted files first and only remove metadata after the vault
+		// data has been cleared. If files deletion fails we keep the metadata
+		// so the remaining .enc files stay decryptable (recoverable). If we
+		// removed metadata first, a subsequent I/O failure would orphan the
+		// encrypted files without their salt/params and cause permanent loss.
+		let hadMeta = false
 		try {
-			await unlink(metaPath(this.dataDir))
+			await readFile(metaPath(this.dataDir), "utf8")
+			hadMeta = true
 		} catch (err) {
-			if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err
+			if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+				throw new StorageError(`Could not read vault metadata: ${(err as Error).message}`, "io")
+			}
 		}
+
+		const isEnoent = (err: unknown): boolean => (err as NodeJS.ErrnoException).code === "ENOENT"
+
+		try {
+			let entries: string[]
+			try {
+				entries = await readdir(this.dataDir)
+			} catch (err) {
+				if (!isEnoent(err)) throw err
+				entries = []
+			}
+			await Promise.all(
+				entries
+					.filter((entry) => entry.endsWith(".enc"))
+					.map(async (entry) => {
+						try {
+							await unlink(path.join(this.dataDir, entry))
+						} catch (err) {
+							if (!isEnoent(err)) throw err
+						}
+					}),
+			)
+		} catch (err) {
+			if (err instanceof StorageError) throw err
+			throw new StorageError(`Could not reset vault: ${(err as Error).message}`, "io")
+		}
+
+		if (hadMeta) {
+			try {
+				await unlink(metaPath(this.dataDir))
+			} catch (err) {
+				if (!isEnoent(err)) {
+					throw new StorageError(`Could not reset vault metadata: ${(err as Error).message}`, "io")
+				}
+			}
+		}
+
 		this.meta = null
 		this.lock()
 	}

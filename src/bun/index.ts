@@ -154,9 +154,11 @@ const rpc = BrowserView.defineRPC<SecureStorageSchema>({
 				await vm.changePassword(oldPassword, newPassword)
 			},
 			"vault:reset": async () => {
+				// Delete encrypted data before metadata so a failure does not
+				// orphan files without their password metadata.
+				await storageBackend.reset()
 				const vm = getVaultManager()
 				if (vm) await vm.reset()
-				await storageBackend.reset()
 			},
 		},
 	},
