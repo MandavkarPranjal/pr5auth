@@ -169,16 +169,18 @@ const rpc = BrowserView.defineRPC<SecureStorageSchema>({
 					}
 					await vm.createMasterPassword(password, undefined, fallbackKey)
 				}),
-			"vault:unlock": async ({ password }) => {
-				const vm = getVaultManager()
-				if (!vm) throw new Error("Vault manager unavailable")
-				await vm.unlock(password)
-			},
-			"vault:lock": async () => {
-				const vm = getVaultManager()
-				if (!vm) return
-				vm.lock()
-			},
+			"vault:unlock": async ({ password }) =>
+				withVaultSerial(async () => {
+					const vm = getVaultManager()
+					if (!vm) throw new Error("Vault manager unavailable")
+					await vm.unlock(password)
+				}),
+			"vault:lock": async () =>
+				withVaultSerial(async () => {
+					const vm = getVaultManager()
+					if (!vm) return
+					vm.lock()
+				}),
 			"vault:changePassword": async ({ oldPassword, newPassword }) =>
 				withVaultSerial(async () => {
 					const vm = getVaultManager()
@@ -251,12 +253,17 @@ try {
 			return;
 		}
 		if (action === "lock") {
-			// Lock the vault crypto (clear derived key)
-			try {
-				getVaultManager()?.lock()
-			} catch {
-				// ignore
-			}
+			// Serialize with storage writes so an in-flight setItem that already
+			// captured the key (as an immutable copy) either completes with the
+			// old key before the lock or is queued after it. Without this, a
+			// concurrent lock could also interleave with the RPC queue ordering.
+			void withVaultSerial(async () => {
+				try {
+					getVaultManager()?.lock()
+				} catch {
+					// ignore
+				}
+			})
 			// Restore or recreate the window before dispatching lock so the
 			// newly created webview receives the message in a locked state.
 			const didRecreate = restoreWindow();
