@@ -1,4 +1,4 @@
-import { argon2id } from "@noble/hashes/argon2.js"
+import { argon2id, argon2idAsync } from "@noble/hashes/argon2.js"
 
 export const VAULT_SALT_BYTES = 16
 export const VAULT_KEY_BYTES = 32
@@ -33,14 +33,19 @@ export function deriveKey(
 	})
 }
 
-export function deriveKeyAsync(
+export async function deriveKeyAsync(
 	password: string,
 	salt: Uint8Array,
 	params: Argon2Params = DEFAULT_ARGON2_PARAMS,
 ): Promise<Uint8Array> {
-	// Wrap sync variant for callers that prefer async; noble also offers argon2idAsync
-	// but sync is acceptable for our key size and avoids scheduler overhead in tests.
-	return Promise.resolve(deriveKey(password, salt, params))
+	if (!password) throw new Error("Password must not be empty")
+	if (salt.length < 8) throw new Error("Salt too short")
+	return argon2idAsync(password, salt, {
+		t: params.t,
+		m: params.m,
+		p: params.p,
+		dkLen: VAULT_KEY_BYTES,
+	})
 }
 
 export function generateSalt(bytes = VAULT_SALT_BYTES): Uint8Array {

@@ -6,7 +6,11 @@ import {
 	deleteAccount as deleteAccountFromStore,
 	parseVaultImport,
 } from "../services/accountService";
-import { storage } from "../services/storage";
+import {
+	storage,
+	resetVaultWithPassword,
+	isSecureStorageAvailable,
+} from "../services/storage";
 import { createMockAccounts } from "../services/mockData";
 
 export interface UseAccountsResult {
@@ -132,7 +136,22 @@ export function useAccounts(): UseAccountsResult {
 
 	const resetVault = useCallback(async () => {
 		try {
-			await storage.clearVault();
+			if (isSecureStorageAvailable()) {
+				try {
+					await resetVaultWithPassword();
+				} catch (err) {
+					// Fallback to plaintext clear when vault RPC is unavailable
+					// (e.g. outside desktop) – otherwise propagate the vault error.
+					const msg = err instanceof Error ? err.message : String(err);
+					if (/unavailable/i.test(msg)) {
+						await storage.clearVault();
+					} else {
+						throw err;
+					}
+				}
+			} else {
+				await storage.clearVault();
+			}
 		} catch (err) {
 			setError(toErrorMessage(err));
 			throw err;
