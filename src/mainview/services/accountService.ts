@@ -130,7 +130,7 @@ export function deserializeVault(json: string): Account[] | null {
 			return null;
 		}
 		const accounts = candidate.accounts.filter(isValidAccount);
-		return accounts.length > 0 ? accounts : null;
+		return accounts;
 	} catch {
 		return null;
 	}
