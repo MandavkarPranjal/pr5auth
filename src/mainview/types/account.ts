@@ -29,3 +29,5 @@ export interface AppSettings {
 }
 
 export type Page = "dashboard" | "import" | "settings";
+
+export type ImportStrategy = "merge" | "replace" | "skip-duplicates";
