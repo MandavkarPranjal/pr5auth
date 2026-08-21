@@ -67,10 +67,14 @@ export default function App() {
 		};
 	}, [notify]);
 
-	// Sync account count to tray tooltip
+	// Sync account count to tray tooltip - publish only after hydration succeeds
+	// to avoid overwriting the persisted tray count from the main process with 0
+	// during startup, and preserve main-process count when loading fails.
 	useEffect(() => {
+		if (loading) return;
+		if (error) return;
 		void notifyTrayCount(accounts.length);
-	}, [accounts.length]);
+	}, [accounts.length, loading, error]);
 
 	// Listen for tray Lock Vault action
 	useEffect(() => {
