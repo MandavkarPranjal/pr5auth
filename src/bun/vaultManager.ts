@@ -177,7 +177,9 @@ export class VaultManager {
 		// if we provide a hook. For now store old key temporarily inside change flow?
 		// To keep correct, we need to re-encrypt existing vault files here if they exist.
 		// Attempt to migrate vault files transparently.
-		const oldKey = this.key!
+		// Snapshot old key immutably so a concurrent lock() that zeroes
+		// this.key does not corrupt the migration source.
+		const oldKey = new Uint8Array(this.key!)
 		// Actually this.key currently holds old key after unlock. We now have newKey.
 		// Migrate any existing .enc files that were encrypted with oldKey?
 		// But EncryptedFileStorageProvider currently uses VaultManager key only, not OS key.
@@ -291,7 +293,9 @@ export class VaultManager {
 		if (this.locked || !this.key) {
 			throw new StorageError("Vault is locked. Unlock with master password.", "denied")
 		}
-		return this.key
+		// Return a copy so a concurrent lock() that zeroes the internal key
+		// does not mutate an in-flight storage write that already captured it.
+		return new Uint8Array(this.key)
 	}
 
 	// Expose for testing / params inspection
