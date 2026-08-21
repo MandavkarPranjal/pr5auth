@@ -156,7 +156,38 @@ export function useAccounts(): UseAccountsResult {
 			setError(toErrorMessage(err));
 			throw err;
 		}
-		await persist(createMockAccounts());
+		// Vault has been deleted – drop stale UI state immediately. On
+		// desktop installations without an OS-keychain fallback there is no
+		// writable key until a master password is created (VaultLocked with
+		// fallback=null). Reseeding mock accounts would then throw
+		// "No encryption key available" and previously left stale accounts
+		// plus a storage error. Clearing first ensures we either reseed
+		// successfully or stay empty and let the password-creation UI take
+		// over.
+		accountsRef.current = [];
+		setAccounts([]);
+		setError(null);
+		try {
+			try {
+				const status = await storage.getStatus();
+				setStorageStatus(status);
+			} catch {
+				// ignore – persist will surface storage errors
+			}
+			await persist(createMockAccounts());
+		} catch (err) {
+			const msg = toErrorMessage(err);
+			if (/unavailable|no encryption key|no key storage/i.test(msg)) {
+				// No writable key yet (e.g. fallback null + no password) – keep
+				// empty and don't surface a storage error; App shows the
+				// LockScreen in "create" mode via vaultStatus.
+				accountsRef.current = [];
+				setAccounts([]);
+				setError(null);
+				return;
+			}
+			throw err;
+		}
 	}, [persist]);
 
 	const clearError = useCallback(() => setError(null), []);
