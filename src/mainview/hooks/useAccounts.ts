@@ -5,6 +5,18 @@ import {
 	addAccount as addAccountToStore,
 	deleteAccount as deleteAccountFromStore,
 	parseVaultImport,
+	parseJsonImport,
+	parseOtpauthBatch,
+	createAccountsFromParsed,
+	detectDuplicates,
+	planMigration,
+	applyMigration,
+	buildImportPreview,
+	buildJsonImportPreview,
+	buildOtpauthImportPreview,
+	type ImportStrategy,
+	type ImportPreview,
+	type MigrationPlan,
 } from "../services/accountService";
 import {
 	storage,
@@ -21,6 +33,12 @@ export interface UseAccountsResult {
 	addAccount: (input: AddAccountInput) => Promise<void>;
 	deleteAccount: (id: string) => Promise<void>;
 	importVault: (json: string) => Promise<number>;
+	importJson: (json: string, strategy?: ImportStrategy) => Promise<MigrationPlan & { imported: number }>;
+	importOtpauth: (input: string, strategy?: ImportStrategy) => Promise<MigrationPlan & { imported: number }>;
+	importAccounts: (accountsToImport: Account[], strategy?: ImportStrategy) => Promise<MigrationPlan & { imported: number }>;
+	previewJsonImport: (json: string) => ImportPreview;
+	previewOtpauthImport: (input: string) => ImportPreview;
+	detectDuplicatesFor: (candidates: Account[]) => { duplicates: Account[]; uniques: Account[] };
 	replaceAll: (accounts: Account[]) => Promise<void>;
 	resetVault: () => Promise<void>;
 	clearError: () => void;
@@ -127,6 +145,66 @@ export function useAccounts(): UseAccountsResult {
 		[persist],
 	);
 
+	const importJson = useCallback(
+		async (json: string, strategy: ImportStrategy = "merge") => {
+			const { accounts: imported } = parseJsonImport(json);
+			if (imported.length === 0) throw new Error("No accounts found in vault");
+			const plan = planMigration(accountsRef.current, imported, strategy);
+			const next = applyMigration(accountsRef.current, imported, strategy);
+			await persist(next);
+			return { ...plan, imported: plan.uniques.length };
+		},
+		[persist],
+	);
+
+	const importOtpauth = useCallback(
+		async (input: string, strategy: ImportStrategy = "merge") => {
+			const { parsed, errors } = parseOtpauthBatch(input);
+			if (parsed.length === 0) {
+				const reason = errors[0]?.reason ?? "No valid otpauth entries found";
+				throw new Error(reason);
+			}
+			const imported = createAccountsFromParsed(parsed);
+			const plan = planMigration(accountsRef.current, imported, strategy);
+			const next = applyMigration(accountsRef.current, imported, strategy);
+			await persist(next);
+			return { ...plan, imported: plan.uniques.length };
+		},
+		[persist],
+	);
+
+	const importAccounts = useCallback(
+		async (accountsToImport: Account[], strategy: ImportStrategy = "merge") => {
+			if (accountsToImport.length === 0) throw new Error("No accounts to import");
+			const plan = planMigration(accountsRef.current, accountsToImport, strategy);
+			const next = applyMigration(accountsRef.current, accountsToImport, strategy);
+			await persist(next);
+			return { ...plan, imported: plan.uniques.length };
+		},
+		[persist],
+	);
+
+	const previewJsonImport = useCallback(
+		(json: string): ImportPreview => {
+			return buildJsonImportPreview(accountsRef.current, json);
+		},
+		[],
+	);
+
+	const previewOtpauthImport = useCallback(
+		(input: string): ImportPreview => {
+			return buildOtpauthImportPreview(accountsRef.current, input);
+		},
+		[],
+	);
+
+	const detectDuplicatesFor = useCallback(
+		(candidates: Account[]) => {
+			return detectDuplicates(accountsRef.current, candidates);
+		},
+		[],
+	);
+
 	const replaceAll = useCallback(
 		async (next: Account[]) => {
 			await persist(next);
@@ -189,6 +267,12 @@ export function useAccounts(): UseAccountsResult {
 		addAccount,
 		deleteAccount,
 		importVault,
+		importJson,
+		importOtpauth,
+		importAccounts,
+		previewJsonImport,
+		previewOtpauthImport,
+		detectDuplicatesFor,
 		replaceAll,
 		resetVault,
 		clearError,

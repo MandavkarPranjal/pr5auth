@@ -17,8 +17,9 @@ import { AddAccountModal } from "./components/AddAccountModal";
 import { Toast, type ToastItem } from "./components/Toast";
 import { LockScreen } from "./components/LockScreen";
 import { Dashboard } from "./pages/Dashboard";
-import { ImportQR } from "./pages/ImportQR";
 import { Settings } from "./pages/Settings";
+import { ImportWizard } from "./components/ImportWizard";
+import type { ImportStrategy } from "./services/accountService";
 
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 
@@ -31,6 +32,9 @@ export default function App() {
 		addAccount,
 		deleteAccount,
 		importVault,
+		importJson,
+		importAccounts,
+		replaceAll,
 		resetVault,
 		clearError,
 		reload,
@@ -236,13 +240,45 @@ export default function App() {
 	const handleImportVault = useCallback(
 		async (json: string) => {
 			try {
-				const count = await importVault(json);
-				notify("success", `Imported ${count} account${count === 1 ? "" : "s"}`);
+				// Migration-aware import: merge by default, skip duplicates, support multi-format JSON
+				const result = await importJson(json, "merge");
+				if (result.duplicates.length > 0 && result.uniques.length === 0) {
+					notify("info", "All accounts were duplicates — nothing imported");
+				} else if (result.duplicates.length > 0) {
+					notify("success", `Imported ${result.uniques.length} new, skipped ${result.duplicates.length} duplicate${result.duplicates.length === 1 ? "" : "s"}`);
+				} else {
+					notify("success", `Imported ${result.uniques.length} account${result.uniques.length === 1 ? "" : "s"}`);
+				}
 			} catch {
-				notify("error", "Import failed — invalid vault file");
+				// Fallback to legacy vault import for backward compatibility
+				try {
+					const count = await importVault(json);
+					notify("success", `Imported ${count} account${count === 1 ? "" : "s"}`);
+				} catch {
+					notify("error", "Import failed — invalid vault file");
+				}
 			}
 		},
-		[importVault, notify],
+		[importJson, importVault, notify],
+	);
+
+	const handleWizardImport = useCallback(
+		async (toImport: Account[], strategy: ImportStrategy) => {
+			if (strategy === "replace") {
+				await replaceAll(toImport);
+				notify("success", `Vault replaced with ${toImport.length} account${toImport.length === 1 ? "" : "s"}`);
+			} else {
+				const result = await importAccounts(toImport, strategy);
+				if (result.duplicates.length > 0 && result.uniques.length === 0) {
+					notify("info", "All accounts were duplicates — nothing imported");
+				} else if (result.duplicates.length > 0) {
+					notify("success", `Imported ${result.uniques.length} new, skipped ${result.duplicates.length} duplicate${result.duplicates.length === 1 ? "" : "s"}`);
+				} else {
+					notify("success", `Imported ${result.uniques.length} account${result.uniques.length === 1 ? "" : "s"}`);
+				}
+			}
+		},
+		[replaceAll, importAccounts, notify],
 	);
 
 	// Auto-lock after inactivity when enabled.
@@ -402,12 +438,9 @@ export default function App() {
 								/>
 							)}
 							{page === "import" && (
-								<ImportQR
-									onAddParsed={handleAddParsedUri}
-									onOpenModal={(prefill) => {
-										setModalPrefill(prefill);
-										setModalOpen(true);
-									}}
+								<ImportWizard
+									existingAccounts={accounts}
+									onImport={handleWizardImport}
 								/>
 							)}
 							{page === "settings" && (

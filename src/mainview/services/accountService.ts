@@ -192,3 +192,488 @@ export function downloadVaultFile(accounts: Account[], filename = "pr5auth-vault
 	anchor.click();
 	URL.revokeObjectURL(url);
 }
+
+// ─── Standard otpauth batch import ─────────────────────────────────────────
+
+export interface OtpauthBatchResult {
+	parsed: ParsedOtpauth[];
+	errors: Array<{ raw: string; reason: string }>;
+}
+
+/**
+ * Parse one or many standard otpauth://totp/ URIs from a free-form string.
+ * Accepts newline, comma or whitespace separated entries, trims each line,
+ * and collects per-entry errors so callers can surface migration feedback.
+ */
+export function parseOtpauthUris(input: string): ParsedOtpauth[] {
+	return parseOtpauthBatch(input).parsed;
+}
+
+export function parseOtpauthBatch(input: string): OtpauthBatchResult {
+	const parsed: ParsedOtpauth[] = [];
+	const errors: Array<{ raw: string; reason: string }> = [];
+	if (!input || !input.trim()) return { parsed, errors };
+
+	// Split on newlines first to preserve line-aware errors, then split
+	// comma/space separated tokens within each line if not already a URI.
+	const lines = input.split(/\r?\n/);
+	for (const line of lines) {
+		const trimmedLine = line.trim();
+		if (!trimmedLine) continue;
+
+		// Explicitly detect Google Authenticator migration URIs
+		if (/^otpauth-migration:\/\//i.test(trimmedLine)) {
+			errors.push({
+				raw: trimmedLine,
+				reason: "otpauth-migration:// URIs require migration decoding (not a plain otpauth://totp/ URI)",
+			});
+			continue;
+		}
+
+		// If line contains multiple URIs separated by comma or whitespace+otpauth://, split
+		// Use a regex to extract all otpauth://totp/... occurrences
+		const uriRegex = /otpauth:\/\/totp\/[^\s,]+(?:\?[^\s,]*)?/gi;
+		const matches = trimmedLine.match(uriRegex);
+
+		if (matches && matches.length > 0) {
+			// If the whole line is a single URI (or multiple URIs matched), parse each match
+			// Also handle case where line has surrounding text
+			for (const rawUri of matches) {
+				const entry = parseOtpauthUri(rawUri);
+				if (entry) parsed.push(entry);
+				else errors.push({ raw: rawUri, reason: "Invalid otpauth URI or secret" });
+			}
+			// If matches didn't cover entire line and line isn't just URIs, treat remainder as error if no match
+			// (already handled by matches length check)
+			if (matches.join("").trim().length < trimmedLine.length && matches.length === 1 && trimmedLine !== matches[0]) {
+				// Line had extra content besides the URI – we already parsed the URI, so don't error
+			}
+		} else {
+			// No otpauth:// pattern found – try parsing the whole line as a URI
+			const entry = parseOtpauthUri(trimmedLine);
+			if (entry) parsed.push(entry);
+			else {
+				// Also support comma-separated raw strings without newlines
+				const commaParts = trimmedLine.split(",").map((s) => s.trim()).filter(Boolean);
+				if (commaParts.length > 1) {
+					for (const part of commaParts) {
+						const e = parseOtpauthUri(part);
+						if (e) parsed.push(e);
+						else errors.push({ raw: part, reason: "Invalid otpauth URI or secret" });
+					}
+				} else {
+					errors.push({ raw: trimmedLine, reason: "Invalid otpauth URI or secret" });
+				}
+			}
+		}
+	}
+
+	return { parsed, errors };
+}
+
+// Alias for migration workflow callers
+export const parseBulkOtpauth = parseOtpauthBatch;
+export const parseStandardOtpauthEntries = parseOtpauthUris;
+
+// ─── Duplicate detection ───────────────────────────────────────────────────
+
+export interface DuplicateCheckResult<T> {
+	duplicates: T[];
+	uniques: T[];
+}
+
+function normalizeKey(value: string): string {
+	return value.trim().toLowerCase();
+}
+
+function accountDuplicateKey(account: { issuer: string; accountName: string; secret: string }): string[] {
+	// Two keys for duplicate detection: normalized secret and issuer+name composite
+	const secretKey = `secret:${normalizeSecret(account.secret)}`;
+	const identityKey = `identity:${normalizeKey(account.issuer)}::${normalizeKey(account.accountName)}`;
+	return [secretKey, identityKey];
+}
+
+export function isDuplicateAccount(
+	a: { issuer: string; accountName: string; secret: string },
+	b: { issuer: string; accountName: string; secret: string },
+): boolean {
+	const aSecret = normalizeSecret(a.secret);
+	const bSecret = normalizeSecret(b.secret);
+	if (aSecret && bSecret && aSecret === bSecret) return true;
+	if (
+		normalizeKey(a.issuer) === normalizeKey(b.issuer) &&
+		normalizeKey(a.accountName) === normalizeKey(b.accountName)
+	) {
+		return true;
+	}
+	return false;
+}
+
+// Alias names for test compatibility
+export const areDuplicates = isDuplicateAccount;
+export const isDuplicate = isDuplicateAccount;
+
+export function detectDuplicates<T extends { issuer: string; accountName: string; secret: string }>(
+	existing: Array<{ issuer: string; accountName: string; secret: string }>,
+	incoming: T[],
+): DuplicateCheckResult<T> {
+	const existingKeys = new Set<string>();
+	for (const acc of existing) {
+		for (const k of accountDuplicateKey(acc)) existingKeys.add(k);
+	}
+
+	const duplicates: T[] = [];
+	const uniques: T[] = [];
+	const seenIncoming = new Set<string>();
+
+	for (const item of incoming) {
+		const keys = accountDuplicateKey(item);
+		const isDupExisting = keys.some((k) => existingKeys.has(k));
+		const isDupIncoming = keys.some((k) => seenIncoming.has(k));
+		if (isDupExisting || isDupIncoming) {
+			duplicates.push(item);
+		} else {
+			uniques.push(item);
+			for (const k of keys) seenIncoming.add(k);
+		}
+	}
+
+	return { duplicates, uniques };
+}
+
+export const findDuplicates = detectDuplicates;
+export const getDuplicates = detectDuplicates;
+
+export function filterDuplicateAccounts<T extends { issuer: string; accountName: string; secret: string }>(
+	existing: Array<{ issuer: string; accountName: string; secret: string }>,
+	incoming: T[],
+): T[] {
+	return detectDuplicates(existing, incoming).uniques;
+}
+
+export const deduplicateAccounts = filterDuplicateAccounts;
+export const filterDuplicates = filterDuplicateAccounts;
+
+// ─── Account creation from parsed otpauth ──────────────────────────────────
+
+export function createAccountsFromParsed(parsed: ParsedOtpauth[]): Account[] {
+	return parsed.map((p) =>
+		createAccount({
+			issuer: p.issuer,
+			accountName: p.accountName,
+			secret: p.secret,
+			algorithm: p.algorithm,
+			digits: p.digits,
+			period: p.period,
+		}),
+	);
+}
+
+// ─── Exported JSON import (multi-format) ───────────────────────────────────
+
+export interface JsonImportResult {
+	accounts: Account[];
+	source: "pr5auth-vault" | "pr5auth-array" | "generic-array" | "aegis" | "otpauth-uris" | "unknown";
+	warnings: string[];
+}
+
+function normalizeAlgorithm(raw: unknown): HashAlgorithm {
+	const v = typeof raw === "string" ? raw.toLowerCase() : "sha1";
+	if (v === "sha256") return "sha256";
+	if (v === "sha512") return "sha512";
+	return "sha1";
+}
+
+function normalizeDigits(raw: unknown): Digits {
+	const n = Number(raw);
+	if (n === 7) return 7;
+	if (n === 8) return 8;
+	return 6;
+}
+
+function tryParseAegis(parsed: unknown): Account[] | null {
+	try {
+		if (typeof parsed !== "object" || parsed === null) return null;
+		const obj = parsed as Record<string, unknown>;
+		// Aegis format: { db: { entries: [...] } } or { entries: [...] }
+		const db = (obj.db as Record<string, unknown> | undefined) ?? obj;
+		const entries = (db.entries ?? db.accounts ?? obj.entries) as unknown;
+		if (!Array.isArray(entries)) return null;
+		const accounts: Account[] = [];
+		for (const e of entries) {
+			if (typeof e !== "object" || e === null) continue;
+			const entry = e as Record<string, unknown>;
+			const info = (entry.info as Record<string, unknown> | undefined) ?? entry;
+			const secret = typeof info.secret === "string" ? info.secret : typeof entry.secret === "string" ? entry.secret : "";
+			if (!isValidSecret(normalizeSecret(secret))) continue;
+			// Aegis name often like "GitHub: user@example.com"
+			const rawName = typeof entry.name === "string" ? entry.name : typeof entry.label === "string" ? entry.label : "";
+			const issuerFromEntry = typeof entry.issuer === "string" ? entry.issuer : typeof info.issuer === "string" ? info.issuer : "";
+			let issuer = issuerFromEntry;
+			let accountName = rawName;
+			if (rawName.includes(":")) {
+				const idx = rawName.indexOf(":");
+				issuer = issuer || rawName.slice(0, idx).trim();
+				accountName = rawName.slice(idx + 1).trim();
+			}
+			// Aegis algo is upper like "SHA1"
+			accounts.push(
+				createAccount({
+					issuer: issuer || "Unknown",
+					accountName: accountName || (typeof info.name === "string" ? info.name : "Account"),
+					secret: normalizeSecret(secret),
+					algorithm: normalizeAlgorithm(info.algo ?? info.algorithm),
+					digits: normalizeDigits(info.digits),
+					period: typeof info.period === "number" ? info.period : 30,
+				}),
+			);
+		}
+		return accounts.length > 0 ? accounts : null;
+	} catch {
+		return null;
+	}
+}
+
+function tryParseOtpauthUriArray(parsed: unknown): Account[] | null {
+	if (!Array.isArray(parsed)) return null;
+	if (parsed.length === 0) return null;
+	// Array of strings that are otpauth URIs?
+	if (parsed.every((v) => typeof v === "string")) {
+		const uris = parsed as string[];
+		if (uris.some((s) => /^otpauth:\/\//i.test(s.trim()))) {
+			const batch = parseOtpauthBatch(uris.join("\n"));
+			if (batch.parsed.length > 0) return createAccountsFromParsed(batch.parsed);
+		}
+	}
+	return null;
+}
+
+/**
+ * Parse an exported JSON file from various authenticator apps.
+ * Supports:
+ *  - PR5Auth vault file { app, version, exportedAt, accounts }
+ *  - Plain array of Account objects
+ *  - Object with { accounts: [...] }
+ *  - Aegis JSON { db: { entries: [...] } }
+ *  - Array of otpauth:// URIs
+ *  - Object with { uris, otpauth, entries } containing URIs or account objects
+ */
+export function parseExportedJson(json: string): Account[] {
+	const result = parseJsonImport(json);
+	if (result.accounts.length === 0) throw new Error("Vault contains no valid accounts");
+	return result.accounts;
+}
+
+export function parseJsonImport(json: string): JsonImportResult {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(json);
+	} catch {
+		throw new Error("Invalid JSON file");
+	}
+	if (typeof parsed !== "object" || parsed === null) throw new Error("Invalid vault file");
+
+	const warnings: string[] = [];
+
+	// 1. Already handled by deserializeVault? Try PR5Auth vault file first
+	if (!Array.isArray(parsed)) {
+		const candidate = parsed as Partial<VaultFile>;
+		if (Array.isArray(candidate.accounts)) {
+			const accounts = (candidate.accounts as unknown[]).filter(isValidAccount) as Account[];
+			// Migrate older versions: accept version 1, but also migrate older without version
+			if (accounts.length > 0) {
+				// If vault is PR5Auth format, normalize accounts to ensure IDs/createdAt
+				const normalized = accounts.map((a) => ({
+					...a,
+					id: typeof a.id === "string" && a.id ? a.id : createId(),
+					createdAt: typeof a.createdAt === "number" ? a.createdAt : Date.now(),
+				}));
+				const source = candidate.app === "PR5Auth" || candidate.version === VAULT_SCHEMA_VERSION ? "pr5auth-vault" as const : "generic-array" as const;
+				return { accounts: normalized, source, warnings };
+			}
+		}
+	}
+
+	// 2. Plain array of accounts
+	if (Array.isArray(parsed)) {
+		const uriAccounts = tryParseOtpauthUriArray(parsed);
+		if (uriAccounts) return { accounts: uriAccounts, source: "otpauth-uris", warnings };
+		const accounts = (parsed as unknown[]).filter(isValidAccount) as Account[];
+		if (accounts.length > 0) return { accounts, source: "pr5auth-array", warnings };
+	}
+
+	// 3. Object containing accounts/entries/uris
+	if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+		const obj = parsed as Record<string, unknown>;
+
+		// Check for uris / otpauth arrays
+		for (const key of ["uris", "otpauth", "otpauth_uris", "urls"]) {
+			if (Array.isArray(obj[key])) {
+				const uriAccounts = tryParseOtpauthUriArray(obj[key]);
+				if (uriAccounts) return { accounts: uriAccounts, source: "otpauth-uris", warnings };
+			}
+		}
+
+		// Check for string blob of URIs
+		for (const key of ["otpauth", "data", "content"]) {
+			if (typeof obj[key] === "string" && /^otpauth:\/\//i.test((obj[key] as string).trim())) {
+				const batch = parseOtpauthBatch(obj[key] as string);
+				if (batch.parsed.length > 0) return { accounts: createAccountsFromParsed(batch.parsed), source: "otpauth-uris", warnings };
+			}
+		}
+
+		// Generic object with accounts key
+		if (Array.isArray(obj.accounts)) {
+			const accounts = (obj.accounts as unknown[]).filter(isValidAccount) as Account[];
+			if (accounts.length > 0) return { accounts, source: "generic-array", warnings };
+		}
+
+		// Aegis format
+		const aegis = tryParseAegis(parsed);
+		if (aegis) return { accounts: aegis, source: "aegis", warnings };
+	}
+
+	// 4. Fallback: try Aegis even for array-like
+	const aegisFallback = tryParseAegis(parsed);
+	if (aegisFallback) return { accounts: aegisFallback, source: "aegis", warnings };
+
+	throw new Error("Unrecognized vault format");
+}
+
+// Aliases for import tests
+export const parseImportedJson = parseJsonImport;
+export const parseExportedVaultJson = parseJsonImport;
+
+// ─── Migration workflow ────────────────────────────────────────────────────
+
+export type ImportStrategy = "merge" | "replace" | "skip-duplicates";
+
+export interface MigrationPlan {
+	toImport: Account[];
+	duplicates: Account[];
+	uniques: Account[];
+	strategy: ImportStrategy;
+	total: number;
+	existingCount: number;
+	wouldReplace: boolean;
+}
+
+export function planMigration(
+	existing: Account[],
+	imported: Account[],
+	strategy: ImportStrategy = "merge",
+): MigrationPlan {
+	const { duplicates, uniques } = detectDuplicates(existing, imported);
+	return {
+		toImport: strategy === "replace" ? imported : uniques,
+		duplicates,
+		uniques,
+		strategy,
+		total: imported.length,
+		existingCount: existing.length,
+		wouldReplace: strategy === "replace",
+	};
+}
+
+export function applyMigration(
+	existing: Account[],
+	imported: Account[],
+	strategy: ImportStrategy = "merge",
+): Account[] {
+	if (strategy === "replace") {
+		// Replace all with imported, preserving imported order
+		return [...imported];
+	}
+	// merge / skip-duplicates: keep existing, append uniques with fresh IDs if needed
+	const { uniques } = detectDuplicates(existing, imported);
+	// Ensure uniques have valid IDs
+	const normalizedUniques = uniques.map((a) => ({
+		...a,
+		id: a.id && !existing.some((e) => e.id === a.id) ? a.id : createId(),
+	}));
+	return [...existing, ...normalizedUniques];
+}
+
+// Convenience for wizard: prepare import from raw json string + existing vault
+export function prepareImport(
+	existing: Account[],
+	json: string,
+	strategy: ImportStrategy = "merge",
+): { accounts: Account[]; plan: MigrationPlan; source: JsonImportResult["source"] } {
+	const { accounts: imported, source } = parseJsonImport(json);
+	const plan = planMigration(existing, imported, strategy);
+	const accounts = applyMigration(existing, imported, strategy);
+	return { accounts, plan, source };
+}
+
+export function prepareOtpauthImport(
+	existing: Account[],
+	otpauthInput: string,
+	strategy: ImportStrategy = "merge",
+): { accounts: Account[]; plan: MigrationPlan; parsed: ParsedOtpauth[]; errors: OtpauthBatchResult["errors"] } {
+	const { parsed, errors } = parseOtpauthBatch(otpauthInput);
+	const imported = createAccountsFromParsed(parsed);
+	const plan = planMigration(existing, imported, strategy);
+	const accounts = applyMigration(existing, imported, strategy);
+	return { accounts, plan, parsed, errors };
+}
+
+// ─── Import wizard helpers ─────────────────────────────────────────────────
+
+export interface ImportPreview {
+	total: number;
+	valid: number;
+	invalid: number;
+	duplicates: number;
+	uniques: number;
+	duplicateAccounts: Account[];
+	uniqueAccounts: Account[];
+	errors: OtpauthBatchResult["errors"];
+	source: JsonImportResult["source"] | "otpauth";
+}
+
+export function buildImportPreview(
+	existing: Account[],
+	candidates: Account[],
+	errors: OtpauthBatchResult["errors"] = [],
+	source: ImportPreview["source"] = "otpauth",
+): ImportPreview {
+	const { duplicates, uniques } = detectDuplicates(existing, candidates);
+	return {
+		total: candidates.length + errors.length,
+		valid: candidates.length,
+		invalid: errors.length,
+		duplicates: duplicates.length,
+		uniques: uniques.length,
+		duplicateAccounts: duplicates,
+		uniqueAccounts: uniques,
+		errors,
+		source,
+	};
+}
+
+export function buildJsonImportPreview(existing: Account[], json: string): ImportPreview {
+	try {
+		const { accounts, source } = parseJsonImport(json);
+		return buildImportPreview(existing, accounts, [], source);
+	} catch (e) {
+		const msg = e instanceof Error ? e.message : String(e);
+		return {
+			total: 1,
+			valid: 0,
+			invalid: 1,
+			duplicates: 0,
+			uniques: 0,
+			duplicateAccounts: [],
+			uniqueAccounts: [],
+			errors: [{ raw: json.slice(0, 200), reason: msg }],
+			source: "otpauth",
+		};
+	}
+}
+
+export function buildOtpauthImportPreview(existing: Account[], input: string): ImportPreview {
+	const { parsed, errors } = parseOtpauthBatch(input);
+	const accounts = createAccountsFromParsed(parsed);
+	return buildImportPreview(existing, accounts, errors, "otpauth");
+}
