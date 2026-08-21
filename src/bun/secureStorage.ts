@@ -370,6 +370,12 @@ export async function createSecureStorageBackend(): Promise<
 		// path is now refused in VaultManager.createMasterPassword and in
 		// the vault:createPassword handler — a reset or key recovery is
 		// required first.
+		// Note: returning VaultLocked with fallback=null while legacy
+		// localStorage data exists would previously make the renderer's
+		// one-time VaultStorage migration reject and retain a rejected
+		// `ready` promise across the React reload after password creation.
+		// That migration is now deferred in VaultStorage until the provider
+		// reports available, so this return is safe.
 		fallback = null
 	}
 	return new VaultLockedStorageProvider(dataDir, vaultManager, fallback)
