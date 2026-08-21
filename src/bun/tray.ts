@@ -3,10 +3,6 @@ export function formatTrayTitle(count: number): string {
 	return `PR5Auth — ${count} accounts`;
 }
 
-export function getTrayTooltip(count: number): string {
-	return formatTrayTitle(count);
-}
-
 export type TrayAction = "open" | "lock" | "quit";
 
 export interface TrayMenuItem {
