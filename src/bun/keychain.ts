@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto"
 import { spawn } from "node:child_process"
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises"
+import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { homedir, platform } from "node:os"
 import path from "node:path"
 
@@ -84,6 +84,18 @@ function decodeKeyHex(hex: string): Uint8Array | null {
 	return new Uint8Array(decoded)
 }
 
+function decodeKeyBase64(base64: string): Uint8Array | null {
+	const trimmed = base64.trim()
+	let decoded: Buffer
+	try {
+		decoded = Buffer.from(trimmed, "base64")
+	} catch {
+		return null
+	}
+	if (decoded.length !== KEY_SIZE) return null
+	return new Uint8Array(decoded)
+}
+
 class MacKeyStorage implements KeyStorage {
 	readonly kind = "os-keychain" as const
 	readonly detail = "macOS Keychain (security CLI)"
@@ -120,6 +132,105 @@ class MacKeyStorage implements KeyStorage {
 		if (add.code !== 0) {
 			throw new StorageBackendUnavailableError(
 				`macOS Keychain write failed: ${add.stderr.trim()}`,
+			)
+		}
+		return new Uint8Array(key)
+	}
+}
+
+const DPAPI_PS1 = `param(
+    [Parameter(Mandatory=$true)][string]$Action,
+    [Parameter(Mandatory=$true)][string]$Path
+)
+
+Add-Type -AssemblyName System.Security
+
+if ($Action -eq 'read') {
+    if (-not (Test-Path -LiteralPath $Path)) { exit 1 }
+    $blob = [IO.File]::ReadAllBytes($Path)
+    try {
+        $clear = [System.Security.Cryptography.ProtectedData]::Unprotect(
+            $blob, $null,
+            [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
+    } catch {
+        exit 1
+    }
+    if ($clear.Length -ne ${KEY_SIZE}) { exit 1 }
+    [Console]::Out.Write([Convert]::ToBase64String($clear))
+    exit 0
+} elseif ($Action -eq 'write') {
+    $value = [Console]::In.ReadToEnd()
+    $clear = [Convert]::FromBase64String($value.Trim())
+    $blob = [System.Security.Cryptography.ProtectedData]::Protect(
+        $clear, $null,
+        [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
+    [IO.File]::WriteAllBytes($Path, $blob)
+    exit 0
+}
+exit 2
+`
+
+class DpapiKeyStorage implements KeyStorage {
+	readonly kind = "file-encrypted" as const
+	readonly detail: string
+
+	private dataDir: string
+	private scriptPath: string
+	private keyPath: string
+
+	constructor(dataDir: string) {
+		this.dataDir = dataDir
+		this.scriptPath = path.join(dataDir, "dpapi.ps1")
+		this.keyPath = path.join(dataDir, "vault.key")
+		this.detail = `DPAPI-protected key file (${this.keyPath})`
+	}
+
+	private async ensureScript(): Promise<string> {
+		await mkdir(this.dataDir, { recursive: true })
+		await writeFile(this.scriptPath, DPAPI_PS1, { mode: 0o600 })
+		return this.scriptPath
+	}
+
+	async getKey(): Promise<Uint8Array> {
+		const script = await this.ensureScript()
+
+		const read = await run("powershell.exe", [
+			"-NoProfile",
+			"-NonInteractive",
+			"-ExecutionPolicy",
+			"Bypass",
+			"-File",
+			script,
+			"-Action",
+			"read",
+			"-Path",
+			this.keyPath,
+		])
+		if (read.code === 0) {
+			const existing = decodeKeyBase64(read.stdout)
+			if (existing) return existing
+		}
+
+		const key = randomBytes(KEY_SIZE)
+		const write = await run(
+			"powershell.exe",
+			[
+				"-NoProfile",
+				"-NonInteractive",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-File",
+				script,
+				"-Action",
+				"write",
+				"-Path",
+				this.keyPath,
+			],
+			key.toString("base64"),
+		)
+		if (write.code !== 0) {
+			throw new StorageBackendUnavailableError(
+				`DPAPI key protection failed: ${write.stderr.trim()}`,
 			)
 		}
 		return new Uint8Array(key)
@@ -336,41 +447,15 @@ class LinuxKeyStorage implements KeyStorage {
 	}
 }
 
-class FileKeyStorage implements KeyStorage {
+class MachineIdKeyStorage implements KeyStorage {
 	readonly kind = "file-encrypted" as const
-	readonly detail: string
-	private dataDir: string
-	private deriveFromMachineId: boolean
-
-	constructor(dataDir: string, options: { deriveFromMachineId?: boolean }) {
-		this.dataDir = dataDir
-		this.deriveFromMachineId = options.deriveFromMachineId ?? false
-		this.detail = this.deriveFromMachineId
-			? "Key derived from machine-id (Linux fallback)"
-			: `Encrypted key file (${path.join(dataDir, "vault.key")})`
-	}
+	readonly detail = "Key derived from machine-id (Linux fallback)"
 
 	async getKey(): Promise<Uint8Array> {
-		if (this.deriveFromMachineId) {
-			const machineId = await this.readMachineId()
-			return new Uint8Array(
-				createHash("sha256").update(`${machineId}:${SERVICE}`).digest(),
-			)
-		}
-
-		const keyPath = path.join(this.dataDir, "vault.key")
-		try {
-			const existing = await readFile(keyPath)
-			if (existing.length === KEY_SIZE) return new Uint8Array(existing)
-		} catch {
-			// not present yet — created below
-		}
-
-		const key = randomBytes(KEY_SIZE)
-		await mkdir(this.dataDir, { recursive: true })
-		await writeFile(keyPath, new Uint8Array(key), { mode: 0o600 })
-		await chmod(keyPath, 0o600)
-		return new Uint8Array(key)
+		const machineId = await this.readMachineId()
+		return new Uint8Array(
+			createHash("sha256").update(`${machineId}:${SERVICE}`).digest(),
+		)
 	}
 
 	private async readMachineId(): Promise<string> {
@@ -391,16 +476,13 @@ export async function createKeyStorage(dataDir: string): Promise<KeyStorage> {
 
 	let candidates: KeyStorage[]
 	if (current === "darwin") {
-		candidates = [new MacKeyStorage(), new FileKeyStorage(dataDir, {})]
+		candidates = [new MacKeyStorage()]
 	} else if (current === "win32") {
-		candidates = [
-			new WindowsKeyStorage(dataDir),
-			new FileKeyStorage(dataDir, {}),
-		]
+		candidates = [new WindowsKeyStorage(dataDir), new DpapiKeyStorage(dataDir)]
 	} else {
 		candidates = [
 			new LinuxKeyStorage(),
-			new FileKeyStorage(dataDir, { deriveFromMachineId: true }),
+			new MachineIdKeyStorage(),
 		]
 	}
 
