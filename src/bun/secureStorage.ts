@@ -116,156 +116,21 @@ export function decrypt(payload: string, key: Uint8Array): string {
 	}
 }
 
-export class EncryptedFileStorageProvider implements StorageProvider {
-	private dataDir: string
-	private keyStorage: KeyStorage
-	private keyCache: Uint8Array | null = null
-
-	constructor(dataDir: string, keyStorage: KeyStorage) {
+/**
+ * Shared base for file-per-key AES-256-GCM providers.
+ * Subclasses supply the key via `getKey()`; common file I/O
+ * (filePath, atomic temp-write in setItem, ENOENT handling)
+ * lives here so EncryptedFile and VaultLocked don't drift.
+ */
+abstract class BaseEncryptedFileProvider implements StorageProvider {
+	protected dataDir: string
+	constructor(dataDir: string) {
 		this.dataDir = dataDir
-		this.keyStorage = keyStorage
 	}
+	protected abstract getKey(): Promise<Uint8Array>
+	abstract getStatus(): Promise<StorageStatus>
 
-	private async getKey(): Promise<Uint8Array> {
-		if (this.keyCache) return this.keyCache
-		try {
-			this.keyCache = await this.keyStorage.getKey()
-			return this.keyCache
-		} catch (err) {
-			throw new StorageError(
-				`Could not access key storage: ${(err as Error).message}`,
-				"unavailable",
-			)
-		}
-	}
-
-	// Expose for migration
-	async getRawKey(): Promise<Uint8Array> {
-		return this.getKey()
-	}
-
-	private filePath(key: string): string {
-		return path.join(this.dataDir, `${toBase64Url(new Uint8Array(Buffer.from(key)))}.enc`)
-	}
-
-	async getItem(key: string): Promise<string | null> {
-		const k = await this.getKey()
-		let raw: Buffer
-		try {
-			raw = await readFile(this.filePath(key))
-		} catch (err) {
-			if ((err as NodeJS.ErrnoException).code === "ENOENT") return null
-			throw new StorageError(
-				`Could not read vault file: ${(err as Error).message}`,
-				"io",
-			)
-		}
-		return decrypt(raw.toString("utf8"), k)
-	}
-
-	async setItem(key: string, value: string): Promise<void> {
-		const k = await this.getKey()
-		try {
-			await mkdir(this.dataDir, { recursive: true })
-		} catch (err) {
-			throw new StorageError(
-				`Could not create data directory: ${(err as Error).message}`,
-				"io",
-			)
-		}
-		const payload = encrypt(value, k)
-		const file = this.filePath(key)
-		const tempFile = `${file}.${randomBytes(8).toString("hex")}.tmp`
-		try {
-			await writeFile(tempFile, payload, { mode: FILE_MODE })
-			await chmod(tempFile, FILE_MODE)
-			await rename(tempFile, file)
-		} catch (err) {
-			await unlink(tempFile).catch(() => {})
-			throw new StorageError(
-				`Could not write vault file: ${(err as Error).message}`,
-				"io",
-			)
-		}
-	}
-
-	async removeItem(key: string): Promise<void> {
-		try {
-			await unlink(this.filePath(key))
-		} catch (err) {
-			if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-				throw new StorageError(
-					`Could not remove vault file: ${(err as Error).message}`,
-					"io",
-				)
-			}
-		}
-	}
-
-	async reset(): Promise<void> {
-		const isEnoent = (err: unknown): boolean =>
-			(err as NodeJS.ErrnoException).code === "ENOENT"
-		try {
-			let entries: string[]
-			try {
-				entries = await readdir(this.dataDir)
-			} catch (err) {
-				if (!isEnoent(err)) throw err
-				return
-			}
-			await Promise.all(
-				entries
-					.filter((entry) => entry.endsWith(".enc"))
-					.map(async (entry) => {
-						try {
-							await unlink(path.join(this.dataDir, entry))
-						} catch (err) {
-							if (!isEnoent(err)) throw err
-						}
-					}),
-			)
-		} catch (err) {
-			throw new StorageError(
-				`Could not reset vault: ${(err as Error).message}`,
-				"io",
-			)
-		}
-	}
-
-	async getStatus(): Promise<StorageStatus> {
-		return {
-			platform: platform(),
-			kind: "file-encrypted",
-			available: true,
-			detail: `${this.keyStorage.detail} · AES-256-GCM`,
-		}
-	}
-}
-
-export class VaultLockedStorageProvider implements StorageProvider {
-	private dataDir: string
-	private vaultManager: VaultManager
-	private fallback: EncryptedFileStorageProvider | null
-
-	constructor(dataDir: string, vaultManager: VaultManager, fallback: EncryptedFileStorageProvider | null) {
-		this.dataDir = dataDir
-		this.vaultManager = vaultManager
-		this.fallback = fallback
-	}
-
-	private async getKey(): Promise<Uint8Array> {
-		const status = await this.vaultManager.getStatus()
-		if (status.hasPassword) {
-			// Vault is password-protected – must use derived key
-			return this.vaultManager.getKey()
-		}
-		if (this.fallback) {
-			return this.fallback.getRawKey()
-		}
-		throw new StorageError("No encryption key available", "unavailable")
-	}
-
-	private filePath(key: string): string {
+	protected filePath(key: string): string {
 		return path.join(this.dataDir, `${toBase64Url(new Uint8Array(Buffer.from(key)))}.enc`)
 	}
 
@@ -302,11 +167,6 @@ export class VaultLockedStorageProvider implements StorageProvider {
 	}
 
 	async removeItem(key: string): Promise<void> {
-		// Removal should succeed even if locked? But we require key? For delete we still require vault unlocked if password-protected
-		if ((await this.vaultManager.getStatus()).hasPassword) {
-			// Ensure vault is unlocked before allowing delete
-			this.vaultManager.getKey()
-		}
 		try {
 			await unlink(this.filePath(key))
 		} catch (err) {
@@ -317,8 +177,6 @@ export class VaultLockedStorageProvider implements StorageProvider {
 	}
 
 	async reset(): Promise<void> {
-		// Reset requires unlock if password-protected to avoid accidental wipe while locked?
-		// Allow reset even when locked for recovery – but need to clear .enc files regardless.
 		const isEnoent = (err: unknown): boolean => (err as NodeJS.ErrnoException).code === "ENOENT"
 		try {
 			let entries: string[]
@@ -343,13 +201,76 @@ export class VaultLockedStorageProvider implements StorageProvider {
 			throw new StorageError(`Could not reset vault: ${(err as Error).message}`, "io")
 		}
 	}
+}
+
+export class EncryptedFileStorageProvider extends BaseEncryptedFileProvider {
+	private keyStorage: KeyStorage
+	private keyCache: Uint8Array | null = null
+
+	constructor(dataDir: string, keyStorage: KeyStorage) {
+		super(dataDir)
+		this.keyStorage = keyStorage
+	}
+
+	protected async getKey(): Promise<Uint8Array> {
+		if (this.keyCache) return this.keyCache
+		try {
+			this.keyCache = await this.keyStorage.getKey()
+			return this.keyCache
+		} catch (err) {
+			throw new StorageError(`Could not access key storage: ${(err as Error).message}`, "unavailable")
+		}
+	}
+
+	// Expose for migration
+	async getRawKey(): Promise<Uint8Array> {
+		return this.getKey()
+	}
+
+	async getStatus(): Promise<StorageStatus> {
+		return {
+			platform: platform(),
+			kind: "file-encrypted",
+			available: true,
+			detail: `${this.keyStorage.detail} · AES-256-GCM`,
+		}
+	}
+}
+
+export class VaultLockedStorageProvider extends BaseEncryptedFileProvider {
+	private vaultManager: VaultManager
+	private fallback: EncryptedFileStorageProvider | null
+
+	constructor(dataDir: string, vaultManager: VaultManager, fallback: EncryptedFileStorageProvider | null) {
+		super(dataDir)
+		this.vaultManager = vaultManager
+		this.fallback = fallback
+	}
+
+	protected async getKey(): Promise<Uint8Array> {
+		const status = await this.vaultManager.getStatus()
+		if (status.hasPassword) {
+			// Vault is password-protected – must use derived key
+			return this.vaultManager.getKey()
+		}
+		if (this.fallback) {
+			return this.fallback.getRawKey()
+		}
+		throw new StorageError("No encryption key available", "unavailable")
+	}
+
+	override async removeItem(key: string): Promise<void> {
+		// Ensure vault is unlocked before allowing delete when password-protected
+		if ((await this.vaultManager.getStatus()).hasPassword) {
+			this.vaultManager.getKey()
+		}
+		return super.removeItem(key)
+	}
 
 	async getStatus(): Promise<StorageStatus> {
 		const vmStatus = await this.vaultManager.getStatus()
 		if (vmStatus.hasPassword) {
-			const detail = vmStatus.isLocked
-				? "Vault locked · Argon2id · AES-256-GCM"
-				: "Argon2id · AES-256-GCM"
+			const detail = vmStatus.isLocked ? "Vault locked · Argon2id · AES-256-GCM" : "Argon2id · AES-256-GCM"
 			return {
 				platform: platform(),
 				kind: "file-encrypted",

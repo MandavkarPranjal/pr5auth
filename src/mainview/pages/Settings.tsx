@@ -5,7 +5,7 @@ import type { StorageStatus } from "../../shared/storageProvider";
 import type { VaultStatus } from "../../shared/rpcSchema";
 import { Toggle } from "../components/Toggle";
 import { downloadVaultFile } from "../services/accountService";
-import { changeVaultPassword, createMasterPassword, lockVault } from "../services/storage";
+import { changeVaultPassword, lockVault } from "../services/storage";
 
 interface SettingsProps {
 	accounts: Account[];
@@ -29,8 +29,6 @@ export function Settings({
 	onVaultReload,
 }: SettingsProps) {
 	const fileInputRef = useRef<HTMLInputElement>(null);
-	const [masterPw, setMasterPw] = useState("");
-	const [masterConfirm, setMasterConfirm] = useState("");
 	const [oldPw, setOldPw] = useState("");
 	const [newPw, setNewPw] = useState("");
 	const [newConfirm, setNewConfirm] = useState("");
@@ -57,34 +55,6 @@ export function Settings({
 			.text()
 			.then(onImportVault)
 			.catch(() => undefined);
-	}
-
-	async function handleCreateMaster(e: React.FormEvent) {
-		e.preventDefault();
-		setVaultError(null);
-		setVaultMsg(null);
-		if (masterPw.length < 8) {
-			setVaultError("Password must be at least 8 characters.");
-			return;
-		}
-		if (masterPw !== masterConfirm) {
-			setVaultError("Passwords do not match.");
-			return;
-		}
-		setVaultLoading(true);
-		try {
-			await createMasterPassword(masterPw);
-			setVaultMsg("Master password created. Vault encrypted with Argon2.");
-			setMasterPw("");
-			setMasterConfirm("");
-			onVaultReload?.();
-			// Re-fetch not needed – App will update status on next reload, but trigger a window reload hint
-			window.dispatchEvent(new CustomEvent("pr5auth:reload-status"));
-		} catch (err) {
-			setVaultError(err instanceof Error ? err.message : String(err));
-		} finally {
-			setVaultLoading(false);
-		}
 	}
 
 	async function handleChangePassword(e: React.FormEvent) {
@@ -267,35 +237,16 @@ export function Settings({
 								</form>
 							</div>
 						) : (
-							<form onSubmit={handleCreateMaster} className="space-y-3">
-								<p className="text-sm font-medium text-slate-200">Create master password</p>
-								<p className="text-xs leading-relaxed text-slate-500">
-									This will encrypt your vault with Argon2. The password is never stored — you will need it to unlock after inactivity or restart.
-								</p>
-								<input
-									type="password"
-									value={masterPw}
-									onChange={(e) => setMasterPw(e.target.value)}
-									placeholder="Master password (≥8 chars)"
-									className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-								/>
-								<input
-									type="password"
-									value={masterConfirm}
-									onChange={(e) => setMasterConfirm(e.target.value)}
-									placeholder="Confirm password"
-									className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-								/>
+							<div className="space-y-3">
+								<div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3">
+									<p className="text-sm font-medium text-amber-200">No master password yet</p>
+									<p className="text-xs leading-relaxed text-slate-500">
+										Create your master password via the lock screen overlay. This settings form is hidden while the vault is in create mode to avoid a duplicate, unwired path — the LockScreen is the single source for initial password creation.
+									</p>
+								</div>
 								{vaultError && <p className="text-xs text-red-300">{vaultError}</p>}
 								{vaultMsg && <p className="text-xs text-emerald-300">{vaultMsg}</p>}
-								<button
-									type="submit"
-									disabled={vaultLoading}
-									className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
-								>
-									{vaultLoading ? "Creating…" : "Create password & encrypt vault"}
-								</button>
-							</form>
+							</div>
 						)}
 					</div>
 				</section>
