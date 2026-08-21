@@ -137,11 +137,7 @@ export async function notifyTraySettings(settings: AppSettings): Promise<void> {
 export async function getVaultStatus(): Promise<VaultStatus | null> {
 	const rpc = connectRpc()
 	if (!rpc) return null
-	try {
-		return await rpc.request["vault:status"]()
-	} catch {
-		return null
-	}
+	return rpc.request["vault:status"]()
 }
 
 export async function createMasterPassword(password: string): Promise<void> {

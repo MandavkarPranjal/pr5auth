@@ -78,7 +78,10 @@ export default function App() {
 				}
 			})
 			.catch(() => {
-				if (!cancelled) setLocked(false);
+				if (cancelled) return;
+				// Desktop RPC failed – unknown vault state must not fail open
+				setVaultStatus({ hasPassword: true, isLocked: true });
+				setLocked(true);
 			})
 			.finally(() => {
 				if (!cancelled) setVaultLoading(false);
