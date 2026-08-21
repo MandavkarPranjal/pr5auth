@@ -1,5 +1,5 @@
 import { Electroview } from "electrobun/view"
-import type { SecureStorageSchema } from "../../shared/rpcSchema"
+import type { SecureStorageSchema, VaultStatus } from "../../shared/rpcSchema"
 import {
 	SETTINGS_KEY,
 	StorageError,
@@ -69,6 +69,15 @@ interface SecureStorageRpcClient {
 			minimizeToTray: boolean
 			closeToTray: boolean
 		}) => Promise<void>
+		"vault:status": () => Promise<VaultStatus>
+		"vault:createPassword": (params: { password: string }) => Promise<void>
+		"vault:unlock": (params: { password: string }) => Promise<void>
+		"vault:lock": () => Promise<void>
+		"vault:changePassword": (params: {
+			oldPassword: string
+			newPassword: string
+		}) => Promise<void>
+		"vault:reset": () => Promise<void>
 	}
 }
 
@@ -81,7 +90,7 @@ function connectRpc(): SecureStorageRpcClient | null {
 		return sharedRpc
 	}
 	const rpc = Electroview.defineRPC<SecureStorageSchema>({
-		maxRequestTime: 10000,
+		maxRequestTime: 30000,
 		handlers: {
 			requests: {},
 			messages: {
@@ -121,6 +130,52 @@ export async function notifyTraySettings(settings: AppSettings): Promise<void> {
 	} catch {
 		// ignore
 	}
+}
+
+// ─── Vault lock / master password API ───────────────────────────────────────
+
+export async function getVaultStatus(): Promise<VaultStatus | null> {
+	const rpc = connectRpc()
+	if (!rpc) return null
+	try {
+		return await rpc.request["vault:status"]()
+	} catch {
+		return null
+	}
+}
+
+export async function createMasterPassword(password: string): Promise<void> {
+	const rpc = connectRpc()
+	if (!rpc) throw new StorageError("Vault unavailable outside desktop app", "unavailable")
+	await rpc.request["vault:createPassword"]({ password })
+}
+
+export async function unlockVault(password: string): Promise<void> {
+	const rpc = connectRpc()
+	if (!rpc) throw new StorageError("Vault unavailable outside desktop app", "unavailable")
+	await rpc.request["vault:unlock"]({ password })
+}
+
+export async function lockVault(): Promise<void> {
+	const rpc = connectRpc()
+	if (!rpc) return
+	try {
+		await rpc.request["vault:lock"]()
+	} catch {
+		// ignore
+	}
+}
+
+export async function changeVaultPassword(oldPassword: string, newPassword: string): Promise<void> {
+	const rpc = connectRpc()
+	if (!rpc) throw new StorageError("Vault unavailable outside desktop app", "unavailable")
+	await rpc.request["vault:changePassword"]({ oldPassword, newPassword })
+}
+
+export async function resetVaultWithPassword(): Promise<void> {
+	const rpc = connectRpc()
+	if (!rpc) throw new StorageError("Vault unavailable outside desktop app", "unavailable")
+	await rpc.request["vault:reset"]()
 }
 
 export class RpcStorageProvider implements StorageProvider, StorageStatusProvider {

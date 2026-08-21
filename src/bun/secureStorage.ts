@@ -12,6 +12,7 @@ import {
 import type { StorageProvider, StorageStatus } from "../shared/storageProvider"
 import { createKeyStorage } from "./keychain"
 import type { KeyStorage } from "./keychain"
+import { VaultManager } from "./vaultManager"
 
 const ALGORITHM = "aes-256-gcm"
 const IV_SIZE = 12
@@ -138,6 +139,11 @@ export class EncryptedFileStorageProvider implements StorageProvider {
 		}
 	}
 
+	// Expose for migration
+	async getRawKey(): Promise<Uint8Array> {
+		return this.getKey()
+	}
+
 	private filePath(key: string): string {
 		return path.join(this.dataDir, `${toBase64Url(new Uint8Array(Buffer.from(key)))}.enc`)
 	}
@@ -236,6 +242,137 @@ export class EncryptedFileStorageProvider implements StorageProvider {
 	}
 }
 
+export class VaultLockedStorageProvider implements StorageProvider {
+	private dataDir: string
+	private vaultManager: VaultManager
+	private fallback: EncryptedFileStorageProvider | null
+
+	constructor(dataDir: string, vaultManager: VaultManager, fallback: EncryptedFileStorageProvider | null) {
+		this.dataDir = dataDir
+		this.vaultManager = vaultManager
+		this.fallback = fallback
+	}
+
+	private async getKey(): Promise<Uint8Array> {
+		const status = await this.vaultManager.getStatus()
+		if (status.hasPassword) {
+			// Vault is password-protected – must use derived key
+			return this.vaultManager.getKey()
+		}
+		if (this.fallback) {
+			return this.fallback.getRawKey()
+		}
+		throw new StorageError("No encryption key available", "unavailable")
+	}
+
+	private filePath(key: string): string {
+		return path.join(this.dataDir, `${toBase64Url(new Uint8Array(Buffer.from(key)))}.enc`)
+	}
+
+	async getItem(key: string): Promise<string | null> {
+		const k = await this.getKey()
+		let raw: Buffer
+		try {
+			raw = await readFile(this.filePath(key))
+		} catch (err) {
+			if ((err as NodeJS.ErrnoException).code === "ENOENT") return null
+			throw new StorageError(`Could not read vault file: ${(err as Error).message}`, "io")
+		}
+		return decrypt(raw.toString("utf8"), k)
+	}
+
+	async setItem(key: string, value: string): Promise<void> {
+		const k = await this.getKey()
+		try {
+			await mkdir(this.dataDir, { recursive: true })
+		} catch (err) {
+			throw new StorageError(`Could not create data directory: ${(err as Error).message}`, "io")
+		}
+		const payload = encrypt(value, k)
+		const file = this.filePath(key)
+		const tempFile = `${file}.${randomBytes(8).toString("hex")}.tmp`
+		try {
+			await writeFile(tempFile, payload, { mode: FILE_MODE })
+			await chmod(tempFile, FILE_MODE)
+			await rename(tempFile, file)
+		} catch (err) {
+			await unlink(tempFile).catch(() => {})
+			throw new StorageError(`Could not write vault file: ${(err as Error).message}`, "io")
+		}
+	}
+
+	async removeItem(key: string): Promise<void> {
+		// Removal should succeed even if locked? But we require key? For delete we still require vault unlocked if password-protected
+		if ((await this.vaultManager.getStatus()).hasPassword) {
+			// Ensure vault is unlocked before allowing delete
+			this.vaultManager.getKey()
+		}
+		try {
+			await unlink(this.filePath(key))
+		} catch (err) {
+			if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+				throw new StorageError(`Could not remove vault file: ${(err as Error).message}`, "io")
+			}
+		}
+	}
+
+	async reset(): Promise<void> {
+		// Reset requires unlock if password-protected to avoid accidental wipe while locked?
+		// Allow reset even when locked for recovery – but need to clear .enc files regardless.
+		const isEnoent = (err: unknown): boolean => (err as NodeJS.ErrnoException).code === "ENOENT"
+		try {
+			let entries: string[]
+			try {
+				entries = await readdir(this.dataDir)
+			} catch (err) {
+				if (!isEnoent(err)) throw err
+				return
+			}
+			await Promise.all(
+				entries
+					.filter((entry) => entry.endsWith(".enc"))
+					.map(async (entry) => {
+						try {
+							await unlink(path.join(this.dataDir, entry))
+						} catch (err) {
+							if (!isEnoent(err)) throw err
+						}
+					}),
+			)
+		} catch (err) {
+			throw new StorageError(`Could not reset vault: ${(err as Error).message}`, "io")
+		}
+	}
+
+	async getStatus(): Promise<StorageStatus> {
+		const vmStatus = await this.vaultManager.getStatus()
+		if (vmStatus.hasPassword) {
+			const detail = vmStatus.isLocked
+				? "Vault locked · Argon2id · AES-256-GCM"
+				: "Argon2id · AES-256-GCM"
+			return {
+				platform: platform(),
+				kind: "file-encrypted",
+				available: !vmStatus.isLocked,
+				detail,
+			}
+		}
+		if (this.fallback) {
+			return this.fallback.getStatus()
+		}
+		return {
+			platform: platform(),
+			kind: "unknown",
+			available: false,
+			detail: "No key storage",
+		}
+	}
+
+	getVaultManager(): VaultManager {
+		return this.vaultManager
+	}
+}
+
 export class UnavailableStorageProvider implements StorageProvider {
 	private reason: string
 
@@ -282,19 +419,29 @@ export class UnavailableStorageProvider implements StorageProvider {
 }
 
 export async function createSecureStorageBackend(): Promise<
-	EncryptedFileStorageProvider | UnavailableStorageProvider
+	VaultLockedStorageProvider | UnavailableStorageProvider
 > {
 	const dataDir = getDataDir()
+	// VaultManager is always created first – it handles Argon2-derived keys
+	const vaultManager = new VaultManager(dataDir)
+	try {
+		// Preload meta so hasPassword is known quickly
+		await vaultManager.getStatus().catch(() => undefined)
+	} catch {
+		// ignore
+	}
+	let fallback: EncryptedFileStorageProvider | null = null
 	try {
 		const keyStorage = await createKeyStorage(dataDir)
-		return new EncryptedFileStorageProvider(dataDir, keyStorage)
+		fallback = new EncryptedFileStorageProvider(dataDir, keyStorage)
 	} catch (err) {
-		console.error(
-			"[storage] Encrypted storage unavailable, falling back to error provider:",
-			err,
-		)
-		return new UnavailableStorageProvider(
-			err instanceof Error ? err.message : String(err),
-		)
+		console.warn("[storage] Fallback key storage unavailable:", err)
+		// If vault has password, fallback is not needed – we can still operate via VaultManager
+		const vmStatus = await vaultManager.getStatus().catch(() => ({ hasPassword: false, isLocked: false }))
+		if (!vmStatus.hasPassword) {
+			console.error("[storage] Encrypted storage unavailable, falling back to error provider:", err)
+			return new UnavailableStorageProvider(err instanceof Error ? err.message : String(err))
+		}
 	}
+	return new VaultLockedStorageProvider(dataDir, vaultManager, fallback)
 }

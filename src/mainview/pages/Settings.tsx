@@ -1,9 +1,11 @@
-import { useRef } from "react";
-import { Download, Fingerprint, Info, ShieldCheck, Upload } from "lucide-react";
+import { useRef, useState } from "react";
+import { Download, Fingerprint, Info, KeyRound, Lock, ShieldCheck, Upload } from "lucide-react";
 import type { Account, AppSettings } from "../types/account";
 import type { StorageStatus } from "../../shared/storageProvider";
+import type { VaultStatus } from "../../shared/rpcSchema";
 import { Toggle } from "../components/Toggle";
 import { downloadVaultFile } from "../services/accountService";
+import { changeVaultPassword, createMasterPassword, lockVault } from "../services/storage";
 
 interface SettingsProps {
 	accounts: Account[];
@@ -11,6 +13,8 @@ interface SettingsProps {
 	onSettingsChange: (settings: AppSettings) => void;
 	onImportVault: (json: string) => Promise<void>;
 	storageStatus: StorageStatus | null;
+	vaultStatus?: VaultStatus | null;
+	onVaultReload?: () => void;
 }
 
 const APP_VERSION = "0.1.0";
@@ -21,21 +25,31 @@ export function Settings({
 	onSettingsChange,
 	onImportVault,
 	storageStatus,
+	vaultStatus,
+	onVaultReload,
 }: SettingsProps) {
 	const fileInputRef = useRef<HTMLInputElement>(null);
+	const [masterPw, setMasterPw] = useState("");
+	const [masterConfirm, setMasterConfirm] = useState("");
+	const [oldPw, setOldPw] = useState("");
+	const [newPw, setNewPw] = useState("");
+	const [newConfirm, setNewConfirm] = useState("");
+	const [vaultMsg, setVaultMsg] = useState<string | null>(null);
+	const [vaultError, setVaultError] = useState<string | null>(null);
+	const [vaultLoading, setVaultLoading] = useState(false);
 
 	const storageAvailable = storageStatus?.available ?? false;
 	const storageKind = storageStatus?.kind ?? "unknown";
 	const storageLabel = !storageAvailable
-		? "Unavailable"
+		? vaultStatus?.isLocked ? "Locked" : "Unavailable"
 		: storageKind === "os-keychain"
 			? "OS keychain"
 			: storageKind === "file-encrypted"
-				? "Encrypted"
+				? vaultStatus?.hasPassword ? "Argon2id" : "Encrypted"
 				: "Unknown";
 	const storageDetail =
 		storageStatus?.detail ??
-		(storageAvailable ? "Secure storage active" : "Secure storage unavailable");
+		(storageAvailable ? "Secure storage active" : vaultStatus?.isLocked ? "Vault locked — unlock to access" : "Secure storage unavailable");
 
 	function handleImportFile(file: File | undefined | null) {
 		if (!file) return;
@@ -44,6 +58,80 @@ export function Settings({
 			.then(onImportVault)
 			.catch(() => undefined);
 	}
+
+	async function handleCreateMaster(e: React.FormEvent) {
+		e.preventDefault();
+		setVaultError(null);
+		setVaultMsg(null);
+		if (masterPw.length < 8) {
+			setVaultError("Password must be at least 8 characters.");
+			return;
+		}
+		if (masterPw !== masterConfirm) {
+			setVaultError("Passwords do not match.");
+			return;
+		}
+		setVaultLoading(true);
+		try {
+			await createMasterPassword(masterPw);
+			setVaultMsg("Master password created. Vault encrypted with Argon2.");
+			setMasterPw("");
+			setMasterConfirm("");
+			onVaultReload?.();
+			// Re-fetch not needed – App will update status on next reload, but trigger a window reload hint
+			window.dispatchEvent(new CustomEvent("pr5auth:reload-status"));
+		} catch (err) {
+			setVaultError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setVaultLoading(false);
+		}
+	}
+
+	async function handleChangePassword(e: React.FormEvent) {
+		e.preventDefault();
+		setVaultError(null);
+		setVaultMsg(null);
+		if (!oldPw || !newPw) {
+			setVaultError("All fields required.");
+			return;
+		}
+		if (newPw.length < 8) {
+			setVaultError("New password must be at least 8 characters.");
+			return;
+		}
+		if (newPw !== newConfirm) {
+			setVaultError("New passwords do not match.");
+			return;
+		}
+		setVaultLoading(true);
+		try {
+			await changeVaultPassword(oldPw, newPw);
+			setVaultMsg("Master password changed successfully.");
+			setOldPw("");
+			setNewPw("");
+			setNewConfirm("");
+			onVaultReload?.();
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			if (/Invalid master password|denied/i.test(msg)) setVaultError("Incorrect current password.");
+			else setVaultError(msg);
+		} finally {
+			setVaultLoading(false);
+		}
+	}
+
+	async function handleLockNow() {
+		try {
+			await lockVault();
+			window.dispatchEvent(new CustomEvent("pr5auth:lock"));
+			setVaultMsg("Vault locked.");
+		} catch (err) {
+			setVaultError(err instanceof Error ? err.message : String(err));
+		}
+	}
+
+	const hasPassword = vaultStatus?.hasPassword ?? false;
+	const isLocked = vaultStatus?.isLocked ?? false;
 
 	return (
 		<div className="flex h-full flex-col overflow-y-auto">
@@ -99,11 +187,109 @@ export function Settings({
 							className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
 								storageAvailable
 									? "border-emerald-500/20 bg-emerald-500/[0.07] text-emerald-300"
-									: "border-red-500/20 bg-red-500/[0.07] text-red-300"
+									: isLocked
+										? "border-amber-500/20 bg-amber-500/[0.07] text-amber-300"
+										: "border-red-500/20 bg-red-500/[0.07] text-red-300"
 							}`}
 						>
 							{storageLabel}
 						</span>
+					</div>
+				</section>
+
+				<section className="overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02] backdrop-blur-xl">
+					<div className="border-b border-white/[0.06] px-5 py-4">
+						<h3 className="flex items-center gap-2 text-sm font-semibold text-slate-200">
+							<KeyRound className="h-4 w-4 text-indigo-400" />
+							Master password
+						</h3>
+					</div>
+					<div className="p-5">
+						{hasPassword ? (
+							<div className="space-y-4">
+								<div className="flex items-center justify-between rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3">
+									<div className="flex items-center gap-2 text-sm text-emerald-200">
+										<ShieldCheck className="h-4 w-4" />
+										Master password set — vault encrypted with Argon2id
+									</div>
+									{!isLocked && (
+										<button
+											onClick={handleLockNow}
+											className="flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-white/[0.06]"
+										>
+											<Lock className="h-3.5 w-3.5" />
+											Lock now
+										</button>
+									)}
+								</div>
+								<p className="text-xs leading-relaxed text-slate-500">
+									Your vault key is derived from your master password using Argon2 (t=3, m=64MiB, p=1). The password itself is never stored.
+								</p>
+								<form onSubmit={handleChangePassword} className="space-y-3">
+									<p className="text-sm font-medium text-slate-200">Change master password</p>
+									<input
+										type="password"
+										value={oldPw}
+										onChange={(e) => setOldPw(e.target.value)}
+										placeholder="Current password"
+										className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+									/>
+									<input
+										type="password"
+										value={newPw}
+										onChange={(e) => setNewPw(e.target.value)}
+										placeholder="New password (≥8 chars)"
+										className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+									/>
+									<input
+										type="password"
+										value={newConfirm}
+										onChange={(e) => setNewConfirm(e.target.value)}
+										placeholder="Confirm new password"
+										className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+									/>
+									{vaultError && <p className="text-xs text-red-300">{vaultError}</p>}
+									{vaultMsg && <p className="text-xs text-emerald-300">{vaultMsg}</p>}
+									<button
+										type="submit"
+										disabled={vaultLoading}
+										className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+									>
+										{vaultLoading ? "Updating…" : "Update password"}
+									</button>
+								</form>
+							</div>
+						) : (
+							<form onSubmit={handleCreateMaster} className="space-y-3">
+								<p className="text-sm font-medium text-slate-200">Create master password</p>
+								<p className="text-xs leading-relaxed text-slate-500">
+									This will encrypt your vault with Argon2. The password is never stored — you will need it to unlock after inactivity or restart.
+								</p>
+								<input
+									type="password"
+									value={masterPw}
+									onChange={(e) => setMasterPw(e.target.value)}
+									placeholder="Master password (≥8 chars)"
+									className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+								/>
+								<input
+									type="password"
+									value={masterConfirm}
+									onChange={(e) => setMasterConfirm(e.target.value)}
+									placeholder="Confirm password"
+									className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+								/>
+								{vaultError && <p className="text-xs text-red-300">{vaultError}</p>}
+								{vaultMsg && <p className="text-xs text-emerald-300">{vaultMsg}</p>}
+								<button
+									type="submit"
+									disabled={vaultLoading}
+									className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+								>
+									{vaultLoading ? "Creating…" : "Create password & encrypt vault"}
+								</button>
+							</form>
+						)}
 					</div>
 				</section>
 

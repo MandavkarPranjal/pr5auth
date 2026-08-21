@@ -12,6 +12,7 @@
 		"test": "bun test"
 	},
 	"dependencies": {
+		"@noble/hashes": "^2.3.0",
 		"electrobun": "1.18.1",
 		"jsqr": "^1.4.0",
 		"lucide-react": "^1.32.0",

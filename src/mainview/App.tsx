@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Account, AddAccountInput, AppSettings, Page } from "./types/account";
 import { useAccounts } from "./hooks/useAccounts";
-import { notifyTrayCount, notifyTraySettings, storage } from "./services/storage";
+import {
+	notifyTrayCount,
+	notifyTraySettings,
+	storage,
+	getVaultStatus,
+	createMasterPassword,
+	unlockVault,
+	lockVault,
+} from "./services/storage";
+import type { VaultStatus } from "../shared/rpcSchema";
 import { parseOtpauthUri } from "./services/accountService";
 import { Sidebar } from "./components/Sidebar";
 import { AddAccountModal } from "./components/AddAccountModal";
@@ -24,6 +33,7 @@ export default function App() {
 		importVault,
 		resetVault,
 		clearError,
+		reload,
 	} = useAccounts();
 
 	const [page, setPage] = useState<Page>("dashboard");
@@ -31,6 +41,8 @@ export default function App() {
 	const [modalPrefill, setModalPrefill] = useState<Partial<AddAccountInput> | undefined>();
 	const [settings, setSettings] = useState<AppSettings>({ autoLock: true, minimizeToTray: false, closeToTray: false });
 	const [locked, setLocked] = useState(false);
+	const [vaultStatus, setVaultStatus] = useState<VaultStatus | null>(null);
+	const [vaultLoading, setVaultLoading] = useState(true);
 	const [toasts, setToasts] = useState<ToastItem[]>([]);
 
 	const accountsRef = useRef<Account[]>([]);
@@ -44,6 +56,38 @@ export default function App() {
 		}, 2800);
 	}, []);
 
+	// Initial vault status check – determines initial lock state
+	useEffect(() => {
+		let cancelled = false;
+		getVaultStatus()
+			.then((status) => {
+				if (cancelled) return;
+				setVaultStatus(status);
+				if (status) {
+					if (!status.hasPassword) {
+						// No master password yet – require creation
+						setLocked(true);
+					} else if (status.isLocked) {
+						setLocked(true);
+					} else {
+						setLocked(false);
+					}
+				} else {
+					// Outside Electrobun (e.g. vite preview) – no vault locking
+					setLocked(false);
+				}
+			})
+			.catch(() => {
+				if (!cancelled) setLocked(false);
+			})
+			.finally(() => {
+				if (!cancelled) setVaultLoading(false);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
 	useEffect(() => {
 		let cancelled = false;
 		storage
@@ -55,6 +99,9 @@ export default function App() {
 				}
 			})
 			.catch((err: unknown) => {
+				// Don't show settings error when vault is locked – settings are encrypted
+				const msg = err instanceof Error ? err.message : String(err);
+				if (/locked|denied/i.test(msg) && locked) return;
 				if (!cancelled) {
 					notify(
 						"error",
@@ -65,7 +112,8 @@ export default function App() {
 		return () => {
 			cancelled = true;
 		};
-	}, [notify]);
+		// Reload settings when vault is unlocked
+	}, [notify, locked, reload]);
 
 	// Sync account count to tray tooltip - publish only after hydration succeeds
 	// to avoid overwriting the persisted tray count from the main process with 0
@@ -81,7 +129,13 @@ export default function App() {
 
 	// Listen for tray Lock Vault action
 	useEffect(() => {
-		const handler = () => setLocked(true);
+		const handler = () => {
+			// Backend already locked via RPC, just reflect in UI
+			void getVaultStatus().then((s) => {
+				if (s) setVaultStatus(s);
+			});
+			setLocked(true);
+		};
 		window.addEventListener("pr5auth:lock", handler);
 		return () => window.removeEventListener("pr5auth:lock", handler);
 	}, []);
@@ -191,16 +245,37 @@ export default function App() {
 		if (!settings.autoLock || locked) return;
 		const id = window.setInterval(() => {
 			if (Date.now() - lastActivityRef.current >= AUTO_LOCK_MS) {
+				void lockVault().catch(() => undefined);
+				setVaultStatus((prev: VaultStatus | null) => (prev ? { ...prev, isLocked: true } : prev));
 				setLocked(true);
 			}
 		}, 1000);
 		return () => window.clearInterval(id);
 	}, [settings.autoLock, locked]);
 
-	const handleUnlock = useCallback(() => {
+	const handleUnlock = useCallback(async (password: string) => {
+		await unlockVault(password);
 		lastActivityRef.current = Date.now();
+		const status = await getVaultStatus().catch(() => null);
+		if (status) setVaultStatus(status);
 		setLocked(false);
-	}, []);
+		notify("success", "Vault unlocked");
+		reload();
+	}, [notify, reload]);
+
+	const handleCreate = useCallback(async (password: string) => {
+		await createMasterPassword(password);
+		lastActivityRef.current = Date.now();
+		const status = await getVaultStatus().catch(() => null);
+		if (status) setVaultStatus(status);
+		else setVaultStatus({ hasPassword: true, isLocked: false });
+		setLocked(false);
+		notify("success", "Master password created");
+		reload();
+	}, [notify, reload]);
+
+	// Don't show storage error banner when vault is locked – it's expected
+	const showError = error && !locked && !vaultLoading;
 
 	return (
 		<div className="flex h-screen w-screen overflow-hidden bg-[#0A0D14] text-slate-200 selection:bg-indigo-500/30">
@@ -219,7 +294,7 @@ export default function App() {
 
 			<main className="relative z-10 flex-1 overflow-hidden">
 				<div className="h-full overflow-y-auto p-8">
-					{error && (
+					{showError && (
 						<div className="mb-4 flex items-start justify-between gap-4 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
 							<div>
 								<p className="text-sm font-semibold text-red-200">
@@ -255,7 +330,11 @@ export default function App() {
 							</div>
 						</div>
 					)}
-					{loading ? (
+					{vaultLoading ? (
+						<div className="flex h-full items-center justify-center">
+							<div className="h-8 w-8 animate-spin rounded-full border-2 border-white/[0.08] border-t-indigo-500" />
+						</div>
+					) : loading ? (
 						<div className="flex h-full items-center justify-center">
 							<div className="h-8 w-8 animate-spin rounded-full border-2 border-white/[0.08] border-t-indigo-500" />
 						</div>
@@ -288,6 +367,8 @@ export default function App() {
 									onSettingsChange={handleSettingsChange}
 									onImportVault={handleImportVault}
 									storageStatus={storageStatus}
+									vaultStatus={vaultStatus}
+									onVaultReload={reload}
 								/>
 							)}
 						</>
@@ -306,7 +387,13 @@ export default function App() {
 			/>
 
 			<Toast items={toasts} />
-			{locked && <LockScreen onUnlock={handleUnlock} />}
+			{locked && (
+				<LockScreen
+					mode={vaultStatus && !vaultStatus.hasPassword ? "create" : "unlock"}
+					onUnlock={handleUnlock}
+					onCreate={handleCreate}
+				/>
+			)}
 		</div>
 	);
 }

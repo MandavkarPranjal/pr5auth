@@ -10,6 +10,14 @@ const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
 
 const storageBackend = await createSecureStorageBackend();
 
+// Helper to get VaultManager if present
+function getVaultManager(): import("./vaultManager").VaultManager | null {
+	const vb = storageBackend as unknown as { getVaultManager?: () => import("./vaultManager").VaultManager }
+	if (vb && typeof vb.getVaultManager === "function") return vb.getVaultManager()
+	// Also check VaultLockedStorageProvider shape
+	return (storageBackend as unknown as { vaultManager?: import("./vaultManager").VaultManager }).vaultManager ?? null
+}
+
 // Tray state
 let accountCount = 0;
 let minimizeToTray = false;
@@ -103,7 +111,7 @@ function hideWindow() {
 }
 
 const rpc = BrowserView.defineRPC<SecureStorageSchema>({
-	maxRequestTime: 10000,
+	maxRequestTime: 30000,
 	handlers: {
 		requests: {
 			"storage:getItem": async ({ key }) => storageBackend.getItem(key),
@@ -119,6 +127,36 @@ const rpc = BrowserView.defineRPC<SecureStorageSchema>({
 			"tray:updateSettings": async ({ minimizeToTray: mtt, closeToTray: ctt }) => {
 				minimizeToTray = mtt;
 				closeToTray = ctt;
+			},
+			"vault:status": async () => {
+				const vm = getVaultManager()
+				if (!vm) return { hasPassword: false, isLocked: false }
+				return vm.getStatus()
+			},
+			"vault:createPassword": async ({ password }) => {
+				const vm = getVaultManager()
+				if (!vm) throw new Error("Vault manager unavailable")
+				await vm.createMasterPassword(password)
+			},
+			"vault:unlock": async ({ password }) => {
+				const vm = getVaultManager()
+				if (!vm) throw new Error("Vault manager unavailable")
+				await vm.unlock(password)
+			},
+			"vault:lock": async () => {
+				const vm = getVaultManager()
+				if (!vm) return
+				vm.lock()
+			},
+			"vault:changePassword": async ({ oldPassword, newPassword }) => {
+				const vm = getVaultManager()
+				if (!vm) throw new Error("Vault manager unavailable")
+				await vm.changePassword(oldPassword, newPassword)
+			},
+			"vault:reset": async () => {
+				const vm = getVaultManager()
+				if (vm) await vm.reset()
+				await storageBackend.reset()
 			},
 		},
 	},
@@ -178,6 +216,12 @@ try {
 			return;
 		}
 		if (action === "lock") {
+			// Lock the vault crypto (clear derived key)
+			try {
+				getVaultManager()?.lock()
+			} catch {
+				// ignore
+			}
 			// Restore or recreate the window before dispatching lock so the
 			// newly created webview receives the message in a locked state.
 			const didRecreate = restoreWindow();

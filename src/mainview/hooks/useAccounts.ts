@@ -20,6 +20,7 @@ export interface UseAccountsResult {
 	replaceAll: (accounts: Account[]) => Promise<void>;
 	resetVault: () => Promise<void>;
 	clearError: () => void;
+	reload: () => void;
 }
 
 function toErrorMessage(err: unknown): string {
@@ -31,6 +32,7 @@ export function useAccounts(): UseAccountsResult {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [storageStatus, setStorageStatus] = useState<StorageStatus | null>(null);
+	const [reloadToken, setReloadToken] = useState(0);
 	const accountsRef = useRef<Account[]>([]);
 
 	const persist = useCallback(async (next: Account[]) => {
@@ -44,6 +46,12 @@ export function useAccounts(): UseAccountsResult {
 		accountsRef.current = next;
 		setAccounts(next);
 		setError(null);
+	}, []);
+
+	const reload = useCallback(() => {
+		setLoading(true);
+		setError(null);
+		setReloadToken((t) => t + 1);
 	}, []);
 
 	useEffect(() => {
@@ -69,6 +77,7 @@ export function useAccounts(): UseAccountsResult {
 					next = stored;
 					accountsRef.current = next;
 					setAccounts(next);
+					setError(null);
 				}
 			} catch (err) {
 				if (!cancelled) setError(toErrorMessage(err));
@@ -81,7 +90,7 @@ export function useAccounts(): UseAccountsResult {
 		return () => {
 			cancelled = true;
 		};
-	}, [persist]);
+	}, [persist, reloadToken]);
 
 	const addAccount = useCallback(
 		async (input: AddAccountInput) => {
@@ -139,5 +148,6 @@ export function useAccounts(): UseAccountsResult {
 		replaceAll,
 		resetVault,
 		clearError,
+		reload,
 	};
 }
