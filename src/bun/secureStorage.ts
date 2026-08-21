@@ -364,6 +364,12 @@ export async function createSecureStorageBackend(): Promise<
 		// UnavailableStorageProvider. VaultLockedStorageProvider with
 		// fallback=null reports storage unavailable until a password is
 		// created, at which point Argon2-derived keys bootstrap storage.
+		// When legacy `.enc` files already exist, password creation without
+		// a source key would skip migrateVaultData and make data
+		// undecryptable (new Argon2 key vs old OS-key ciphertext). That
+		// path is now refused in VaultManager.createMasterPassword and in
+		// the vault:createPassword handler — a reset or key recovery is
+		// required first.
 		fallback = null
 	}
 	return new VaultLockedStorageProvider(dataDir, vaultManager, fallback)

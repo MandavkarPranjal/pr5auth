@@ -2,7 +2,7 @@ import { BrowserView, BrowserWindow, Tray, Updater, Utils } from "electrobun/bun
 import Electrobun from "electrobun/bun";
 import type { SecureStorageSchema } from "../shared/rpcSchema";
 import { StorageError } from "../shared/storageProvider";
-import { createSecureStorageBackend } from "./secureStorage";
+import { createSecureStorageBackend, getDataDir } from "./secureStorage";
 import { buildTrayMenu, formatTrayTitle } from "./tray";
 import { SETTINGS_KEY, VAULT_KEY } from "../shared/storageProvider";
 
@@ -160,13 +160,35 @@ const rpc = BrowserView.defineRPC<SecureStorageSchema>({
 					// undecryptable (unrecoverable). Mirror changePassword's
 					// migrateVaultData but with the fallback key as source.
 					let fallbackKey: Uint8Array | undefined
+					let fallbackUnavailable = false
 					try {
 						const backend = storageBackend as unknown as { fallback?: { getRawKey: () => Promise<Uint8Array> } }
 						if (backend?.fallback?.getRawKey) {
 							fallbackKey = await backend.fallback.getRawKey()
+						} else {
+							fallbackUnavailable = true
 						}
 					} catch {
-						// no fallback or unavailable — nothing to migrate
+						fallbackUnavailable = true
+					}
+					// If we have no source key but legacy `.enc` files exist, creating
+					// a password would skip migrateVaultData and leave the old
+					// ciphertext undecryptable with the new Argon2 key (unrecoverable).
+					// Refuse until the OS key is available or the vault is reset.
+					if (!fallbackKey && fallbackUnavailable) {
+						try {
+							const { readdir } = await import("node:fs/promises")
+							const entries = await readdir(getDataDir())
+							if (entries.some((e) => e.endsWith(".enc"))) {
+								throw new StorageError(
+									"Cannot create master password: encrypted vault data exists but the OS key backend is unavailable. Recover the original key or reset the vault before setting a password.",
+									"unavailable",
+								)
+							}
+						} catch (err) {
+							if (err instanceof StorageError) throw err
+							if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err
+						}
 					}
 					await vm.createMasterPassword(password, undefined, fallbackKey)
 				}),
