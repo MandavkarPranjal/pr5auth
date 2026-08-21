@@ -114,7 +114,7 @@ describe("EncryptedFileStorageProvider", () => {
 		await provider.setItem(VAULT_KEY, "data")
 		const files = await readdir(dir)
 		await writeFile(path.join(dir, files[0]), "garbage", "utf8")
-		expect(provider.getItem(VAULT_KEY)).rejects.toThrow(StorageError)
+		await expect(provider.getItem(VAULT_KEY)).rejects.toThrow(StorageError)
 	})
 
 	it("removes an item", async () => {
