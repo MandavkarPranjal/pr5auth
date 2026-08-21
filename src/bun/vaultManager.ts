@@ -87,7 +87,7 @@ export class VaultManager {
 		return this.locked || this.key === null
 	}
 
-	async createMasterPassword(password: string, params: Argon2Params = DEFAULT_ARGON2_PARAMS): Promise<void> {
+	async createMasterPassword(password: string, params: Argon2Params = DEFAULT_ARGON2_PARAMS, fallbackKey?: Uint8Array): Promise<void> {
 		if (!password || password.length < 8) {
 			throw new StorageError("Master password must be at least 8 characters", "denied")
 		}
@@ -104,6 +104,9 @@ export class VaultManager {
 			params,
 			verifier,
 			createdAt: Date.now(),
+		}
+		if (fallbackKey) {
+			await this.migrateVaultData(fallbackKey, key)
 		}
 		await this.saveMeta(meta)
 		this.key = key

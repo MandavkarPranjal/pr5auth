@@ -121,12 +121,18 @@ export function Settings({
 	}
 
 	async function handleLockNow() {
+		if (vaultLoading) return;
+		setVaultError(null);
+		setVaultMsg(null);
+		setVaultLoading(true);
 		try {
 			await lockVault();
 			window.dispatchEvent(new CustomEvent("pr5auth:lock"));
 			setVaultMsg("Vault locked.");
 		} catch (err) {
 			setVaultError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setVaultLoading(false);
 		}
 	}
 
@@ -215,7 +221,8 @@ export function Settings({
 									{!isLocked && (
 										<button
 											onClick={handleLockNow}
-											className="flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-white/[0.06]"
+											disabled={vaultLoading}
+											className="flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-white/[0.06] disabled:opacity-50 disabled:cursor-not-allowed"
 										>
 											<Lock className="h-3.5 w-3.5" />
 											Lock now
