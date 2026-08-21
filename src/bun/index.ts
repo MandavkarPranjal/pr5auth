@@ -167,7 +167,7 @@ try {
 	});
 	tray.setMenu(buildTrayMenu() as unknown as Parameters<Tray["setMenu"]>[0]);
 
-	tray.on("tray-clicked", (event: unknown) => {
+	const handleTrayEvent = (event: unknown) => {
 		const data = (event as { data?: { action?: string } })?.data;
 		const action = data?.action ?? "";
 		// Empty action means tray icon clicked — restore window
@@ -216,7 +216,15 @@ try {
 			Utils.quit();
 			return;
 		}
-	});
+	};
+	tray.on("tray-clicked", handleTrayEvent);
+	// Electrobun docs historically used "tray-clicked" for both icon and menu,
+	// but newer builds may emit "tray-item-clicked" for menu selections.
+	// Listen to both to ensure Lock Vault / Quit fire on all versions.
+	(tray as unknown as { on: (n: string, h: (e: unknown) => void) => void }).on(
+		"tray-item-clicked",
+		handleTrayEvent,
+	);
 } catch (e) {
 	console.warn("Tray creation failed:", e);
 }
