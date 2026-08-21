@@ -293,6 +293,19 @@ export default function App() {
 		reload();
 	}, [notify, reload]);
 
+	const refreshVaultStatus = useCallback(() => {
+		void getVaultStatus()
+			.then((s) => {
+				if (s) setVaultStatus(s);
+			})
+			.catch(() => undefined);
+	}, []);
+
+	const handleVaultReload = useCallback(() => {
+		reload();
+		refreshVaultStatus();
+	}, [reload, refreshVaultStatus]);
+
 	// Don't show storage error banner when vault is locked – it's expected
 	const showError = error && !locked && !vaultLoading;
 
@@ -387,7 +400,7 @@ export default function App() {
 									onImportVault={handleImportVault}
 									storageStatus={storageStatus}
 									vaultStatus={vaultStatus}
-									onVaultReload={reload}
+									onVaultReload={handleVaultReload}
 								/>
 							)}
 						</>
