@@ -147,9 +147,15 @@ export default function App() {
 	useEffect(() => {
 		const handler = () => {
 			// Backend already locked via RPC, just reflect in UI
-			void getVaultStatus().then((s) => {
-				if (s) setVaultStatus(s);
-			});
+			void getVaultStatus()
+				.then((s) => {
+					if (s) setVaultStatus(s);
+				})
+				.catch(() => {
+					// Vault status unavailable or metadata corrupt – keep
+					// the already-applied locked UI state and avoid an
+					// unhandled promise rejection.
+				});
 			setLocked(true);
 		};
 		window.addEventListener("pr5auth:lock", handler);

@@ -137,18 +137,7 @@ export function useAccounts(): UseAccountsResult {
 	const resetVault = useCallback(async () => {
 		try {
 			if (isSecureStorageAvailable()) {
-				try {
-					await resetVaultWithPassword();
-				} catch (err) {
-					// Fallback to plaintext clear when vault RPC is unavailable
-					// (e.g. outside desktop) – otherwise propagate the vault error.
-					const msg = err instanceof Error ? err.message : String(err);
-					if (/unavailable/i.test(msg)) {
-						await storage.clearVault();
-					} else {
-						throw err;
-					}
-				}
+				await resetVaultWithPassword();
 			} else {
 				await storage.clearVault();
 			}
