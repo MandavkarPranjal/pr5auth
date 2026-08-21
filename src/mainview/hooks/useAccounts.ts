@@ -118,7 +118,7 @@ export function useAccounts(): UseAccountsResult {
 
 	const resetVault = useCallback(async () => {
 		try {
-			await storage.reset();
+			await storage.clearVault();
 		} catch (err) {
 			setError(toErrorMessage(err));
 			throw err;
