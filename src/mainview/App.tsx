@@ -248,9 +248,12 @@ export default function App() {
 		if (!settings.autoLock || locked) return;
 		const id = window.setInterval(() => {
 			if (Date.now() - lastActivityRef.current >= AUTO_LOCK_MS) {
-				void lockVault().catch(() => undefined);
-				setVaultStatus((prev: VaultStatus | null) => (prev ? { ...prev, isLocked: true } : prev));
-				setLocked(true);
+				void lockVault()
+					.then(() => {
+						setVaultStatus((prev: VaultStatus | null) => (prev ? { ...prev, isLocked: true } : prev));
+						setLocked(true);
+					})
+					.catch(() => undefined);
 			}
 		}, 1000);
 		return () => window.clearInterval(id);

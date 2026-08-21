@@ -155,11 +155,7 @@ export async function unlockVault(password: string): Promise<void> {
 export async function lockVault(): Promise<void> {
 	const rpc = connectRpc()
 	if (!rpc) return
-	try {
-		await rpc.request["vault:lock"]()
-	} catch {
-		// ignore
-	}
+	await rpc.request["vault:lock"]()
 }
 
 export async function changeVaultPassword(oldPassword: string, newPassword: string): Promise<void> {
