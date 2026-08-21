@@ -3,9 +3,9 @@ import jsQR from "jsqr";
 /**
  * QR decoding service.
  *
- * The interface is intentionally thin so a native camera scanner
- * (or an IPC-backed decoder) can replace the canvas-based image
- * decoder later without touching the ImportQR page.
+ * The interface is intentionally thin so an IPC-backed decoder can
+ * replace the canvas-based image decoder later without touching the
+ * ImportQR page.
  */
 
 export interface QrDecoder {

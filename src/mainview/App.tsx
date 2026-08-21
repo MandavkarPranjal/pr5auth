@@ -14,7 +14,17 @@ import { Settings } from "./pages/Settings";
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 
 export default function App() {
-	const { accounts, loading, addAccount, deleteAccount, importVault } = useAccounts();
+	const {
+		accounts,
+		loading,
+		error,
+		storageStatus,
+		addAccount,
+		deleteAccount,
+		importVault,
+		resetVault,
+		clearError,
+	} = useAccounts();
 
 	const [page, setPage] = useState<Page>("dashboard");
 	const [modalOpen, setModalOpen] = useState(false);
@@ -26,21 +36,6 @@ export default function App() {
 	const accountsRef = useRef<Account[]>([]);
 	accountsRef.current = accounts;
 
-	useEffect(() => {
-		let cancelled = false;
-		storage.loadSettings().then((stored) => {
-			if (!cancelled) setSettings(stored);
-		});
-		return () => {
-			cancelled = true;
-		};
-	}, []);
-
-	const handleSettingsChange = useCallback((next: AppSettings) => {
-		setSettings(next);
-		void storage.saveSettings(next);
-	}, []);
-
 	const notify = useCallback((kind: ToastItem["kind"], message: string) => {
 		const id = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 		setToasts((prev) => [...prev, { id, kind, message }]);
@@ -49,21 +44,67 @@ export default function App() {
 		}, 2800);
 	}, []);
 
+	useEffect(() => {
+		let cancelled = false;
+		storage
+			.loadSettings()
+			.then((stored) => {
+				if (!cancelled) setSettings(stored);
+			})
+			.catch((err: unknown) => {
+				if (!cancelled) {
+					notify(
+						"error",
+						err instanceof Error ? err.message : "Failed to load settings",
+					);
+				}
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [notify]);
+
+	const handleSettingsChange = useCallback(
+		(next: AppSettings) => {
+			setSettings(next);
+			void storage.saveSettings(next).catch((err: unknown) => {
+				notify(
+					"error",
+					err instanceof Error ? err.message : "Failed to save settings",
+				);
+			});
+		},
+		[notify],
+	);
+
 	const handleSaveAccount = useCallback(
 		(input: AddAccountInput) => {
-			void addAccount(input).then(() => {
-				setModalOpen(false);
-				setModalPrefill(undefined);
-				notify("success", `Added ${input.issuer}`);
-			});
+			void addAccount(input)
+				.then(() => {
+					setModalOpen(false);
+					setModalPrefill(undefined);
+					notify("success", `Added ${input.issuer}`);
+				})
+				.catch((err: unknown) => {
+					notify(
+						"error",
+						err instanceof Error ? err.message : "Failed to save account",
+					);
+				});
 		},
 		[addAccount, notify],
 	);
 
 	const handleDelete = useCallback(
 		(id: string) => {
-			void deleteAccount(id);
-			notify("info", "Account removed");
+			void deleteAccount(id)
+				.then(() => notify("info", "Account removed"))
+				.catch((err: unknown) => {
+					notify(
+						"error",
+						err instanceof Error ? err.message : "Failed to remove account",
+					);
+				});
 		},
 		[deleteAccount, notify],
 	);
@@ -80,15 +121,17 @@ export default function App() {
 		(uri: string) => {
 			const parsed = parseOtpauthUri(uri);
 			if (!parsed) return false;
-			setModalPrefill({
-				issuer: parsed.issuer,
-				accountName: parsed.accountName,
-				secret: parsed.secret,
-			});
-			setModalOpen(true);
+			void addAccount(parsed)
+				.then(() => notify("success", `Added ${parsed.issuer}`))
+				.catch((err: unknown) => {
+					notify(
+						"error",
+						err instanceof Error ? err.message : "Failed to save account",
+					);
+				});
 			return true;
 		},
-		[],
+		[addAccount, notify],
 	);
 
 	const handleImportVault = useCallback(
@@ -153,6 +196,42 @@ export default function App() {
 
 			<main className="relative z-10 flex-1 overflow-hidden">
 				<div className="h-full overflow-y-auto p-8">
+					{error && (
+						<div className="mb-4 flex items-start justify-between gap-4 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
+							<div>
+								<p className="text-sm font-semibold text-red-200">
+									Storage error
+								</p>
+								<p className="mt-1 text-xs leading-relaxed text-red-300/80">
+									{error}
+								</p>
+							</div>
+							<div className="flex shrink-0 items-center gap-2">
+								<button
+									onClick={() => {
+										void resetVault().catch((err: unknown) =>
+											notify(
+												"error",
+												err instanceof Error
+													? err.message
+													: "Reset failed",
+											),
+										);
+									}}
+									className="rounded-lg border border-red-400/30 px-3 py-1.5 text-xs font-medium text-red-200 hover:bg-red-400/10"
+								>
+									Reset vault
+								</button>
+								<button
+									onClick={clearError}
+									className="rounded-lg p-1 text-red-300/70 hover:text-red-200"
+									aria-label="Dismiss"
+								>
+									✕
+								</button>
+							</div>
+						</div>
+					)}
 					{loading ? (
 						<div className="flex h-full items-center justify-center">
 							<div className="h-8 w-8 animate-spin rounded-full border-2 border-white/[0.08] border-t-indigo-500" />
@@ -185,6 +264,7 @@ export default function App() {
 									settings={settings}
 									onSettingsChange={handleSettingsChange}
 									onImportVault={handleImportVault}
+									storageStatus={storageStatus}
 								/>
 							)}
 						</>

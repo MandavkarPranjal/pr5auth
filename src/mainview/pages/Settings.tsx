@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { Download, Fingerprint, Info, ShieldCheck, Upload } from "lucide-react";
 import type { Account, AppSettings } from "../types/account";
+import type { StorageStatus } from "../../shared/storageProvider";
 import { Toggle } from "../components/Toggle";
 import { downloadVaultFile } from "../services/accountService";
 
@@ -9,12 +10,32 @@ interface SettingsProps {
 	settings: AppSettings;
 	onSettingsChange: (settings: AppSettings) => void;
 	onImportVault: (json: string) => Promise<void>;
+	storageStatus: StorageStatus | null;
 }
 
 const APP_VERSION = "0.1.0";
 
-export function Settings({ accounts, settings, onSettingsChange, onImportVault }: SettingsProps) {
+export function Settings({
+	accounts,
+	settings,
+	onSettingsChange,
+	onImportVault,
+	storageStatus,
+}: SettingsProps) {
 	const fileInputRef = useRef<HTMLInputElement>(null);
+
+	const storageAvailable = storageStatus?.available ?? false;
+	const storageKind = storageStatus?.kind ?? "unknown";
+	const storageLabel = !storageAvailable
+		? "Unavailable"
+		: storageKind === "os-keychain"
+			? "OS keychain"
+			: storageKind === "file-encrypted"
+				? "Encrypted"
+				: "Unknown";
+	const storageDetail =
+		storageStatus?.detail ??
+		(storageAvailable ? "Secure storage active" : "Secure storage unavailable");
 
 	function handleImportFile(file: File | undefined | null) {
 		if (!file) return;
@@ -56,6 +77,25 @@ export function Settings({ accounts, settings, onSettingsChange, onImportVault }
 							label="Minimize to tray"
 							description="Keep running in the system tray when the window is closed."
 						/>
+					</div>
+					<div className="flex items-center justify-between gap-4 px-5 py-4">
+						<div>
+							<p className="text-sm font-medium text-slate-200">
+								Secure storage
+							</p>
+							<p className="mt-0.5 text-xs leading-relaxed text-slate-500">
+								{storageDetail}
+							</p>
+						</div>
+						<span
+							className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+								storageAvailable
+									? "border-emerald-500/20 bg-emerald-500/[0.07] text-emerald-300"
+									: "border-red-500/20 bg-red-500/[0.07] text-red-300"
+							}`}
+						>
+							{storageLabel}
+						</span>
 					</div>
 				</section>
 

@@ -96,6 +96,8 @@ export function parseOtpauthUri(uri: string): ParsedOtpauth | null {
 	};
 }
 
+export const VAULT_SCHEMA_VERSION = 1
+
 export interface VaultFile {
 	app: string;
 	version: number;
@@ -103,14 +105,46 @@ export interface VaultFile {
 	accounts: Account[];
 }
 
-export function exportVault(accounts: Account[]): string {
-	const payload: VaultFile = {
+function buildVaultFile(accounts: Account[], exportedAt: string): VaultFile {
+	return {
 		app: "PR5Auth",
-		version: 1,
-		exportedAt: new Date().toISOString(),
+		version: VAULT_SCHEMA_VERSION,
+		exportedAt,
 		accounts,
 	};
-	return JSON.stringify(payload, null, 2);
+}
+
+export function serializeVault(
+	accounts: Account[],
+	exportedAt = new Date().toISOString(),
+): string {
+	return JSON.stringify(buildVaultFile(accounts, exportedAt));
+}
+
+export function deserializeVault(json: string): Account[] | null {
+	try {
+		const parsed: unknown = JSON.parse(json);
+		if (typeof parsed !== "object" || parsed === null) return null;
+		const candidate = parsed as Partial<VaultFile>;
+		if (
+			candidate.version !== VAULT_SCHEMA_VERSION ||
+			!Array.isArray(candidate.accounts)
+		) {
+			return null;
+		}
+		const accounts = candidate.accounts.filter(isValidAccount);
+		return accounts;
+	} catch {
+		return null;
+	}
+}
+
+export function exportVault(accounts: Account[]): string {
+	return JSON.stringify(
+		buildVaultFile(accounts, new Date().toISOString()),
+		null,
+		2,
+	);
 }
 
 export function parseVaultImport(json: string): Account[] {
@@ -137,7 +171,7 @@ export function parseVaultImport(json: string): Account[] {
 	throw new Error("Unrecognized vault format");
 }
 
-function isValidAccount(value: unknown): value is Account {
+export function isValidAccount(value: unknown): value is Account {
 	if (typeof value !== "object" || value === null) return false;
 	const a = value as Partial<Account>;
 	return (
