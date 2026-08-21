@@ -34,16 +34,16 @@ export function useAccounts(): UseAccountsResult {
 	const accountsRef = useRef<Account[]>([]);
 
 	const persist = useCallback(async (next: Account[]) => {
-		accountsRef.current = next;
-		setAccounts(next);
 		try {
 			await storage.saveVault(next);
-			setError(null);
 		} catch (err) {
 			const message = toErrorMessage(err);
 			setError(message);
 			throw err;
 		}
+		accountsRef.current = next;
+		setAccounts(next);
+		setError(null);
 	}, []);
 
 	useEffect(() => {
