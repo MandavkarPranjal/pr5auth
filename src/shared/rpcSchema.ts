@@ -11,11 +11,18 @@ export interface SecureStorageSchema {
 			"storage:removeItem": { params: { key: string }; response: void }
 			"storage:status": { params: undefined; response: StorageStatus }
 			"storage:reset": { params: undefined; response: void }
+			"tray:updateCount": { params: { count: number }; response: void }
+			"tray:updateSettings": {
+				params: { minimizeToTray: boolean; closeToTray: boolean }
+				response: void
+			}
 		}
 		messages: {}
 	}
 	webview: {
 		requests: {}
-		messages: {}
+		messages: {
+			"tray:lock": { params: undefined }
+		}
 	}
 }

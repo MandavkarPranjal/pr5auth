@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Account, AddAccountInput, AppSettings, Page } from "./types/account";
 import { useAccounts } from "./hooks/useAccounts";
-import { storage } from "./services/storage";
+import { notifyTrayCount, notifyTraySettings, storage } from "./services/storage";
 import { parseOtpauthUri } from "./services/accountService";
 import { Sidebar } from "./components/Sidebar";
 import { AddAccountModal } from "./components/AddAccountModal";
@@ -29,7 +29,7 @@ export default function App() {
 	const [page, setPage] = useState<Page>("dashboard");
 	const [modalOpen, setModalOpen] = useState(false);
 	const [modalPrefill, setModalPrefill] = useState<Partial<AddAccountInput> | undefined>();
-	const [settings, setSettings] = useState<AppSettings>({ autoLock: true, minimizeToTray: false });
+	const [settings, setSettings] = useState<AppSettings>({ autoLock: true, minimizeToTray: false, closeToTray: false });
 	const [locked, setLocked] = useState(false);
 	const [toasts, setToasts] = useState<ToastItem[]>([]);
 
@@ -49,7 +49,10 @@ export default function App() {
 		storage
 			.loadSettings()
 			.then((stored) => {
-				if (!cancelled) setSettings(stored);
+				if (!cancelled) {
+					setSettings(stored);
+					void notifyTraySettings(stored);
+				}
 			})
 			.catch((err: unknown) => {
 				if (!cancelled) {
@@ -64,6 +67,18 @@ export default function App() {
 		};
 	}, [notify]);
 
+	// Sync account count to tray tooltip
+	useEffect(() => {
+		void notifyTrayCount(accounts.length);
+	}, [accounts.length]);
+
+	// Listen for tray Lock Vault action
+	useEffect(() => {
+		const handler = () => setLocked(true);
+		window.addEventListener("pr5auth:lock", handler);
+		return () => window.removeEventListener("pr5auth:lock", handler);
+	}, []);
+
 	const handleSettingsChange = useCallback(
 		(next: AppSettings) => {
 			setSettings(next);
@@ -73,6 +88,7 @@ export default function App() {
 					err instanceof Error ? err.message : "Failed to save settings",
 				);
 			});
+			void notifyTraySettings(next);
 		},
 		[notify],
 	);
