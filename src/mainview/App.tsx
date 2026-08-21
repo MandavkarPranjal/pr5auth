@@ -247,6 +247,8 @@ export default function App() {
 
 	// Auto-lock after inactivity when enabled.
 	const lastActivityRef = useRef<number>(Date.now());
+	const autoLockInFlightRef = useRef(false);
+	const autoLockRetryAfterRef = useRef(0);
 	const activityHandlersRef = useRef(false);
 
 	useEffect(() => {
@@ -266,14 +268,24 @@ export default function App() {
 	useEffect(() => {
 		if (!settings.autoLock || locked) return;
 		const id = window.setInterval(() => {
-			if (Date.now() - lastActivityRef.current >= AUTO_LOCK_MS) {
-				void lockVault()
-					.then(() => {
-						setVaultStatus((prev: VaultStatus | null) => (prev ? { ...prev, isLocked: true } : prev));
-						setLocked(true);
-					})
-					.catch(() => undefined);
-			}
+			if (Date.now() - lastActivityRef.current < AUTO_LOCK_MS) return;
+			if (autoLockInFlightRef.current) return;
+			if (Date.now() < autoLockRetryAfterRef.current) return;
+			autoLockInFlightRef.current = true;
+			void lockVault()
+				.then(() => {
+					setVaultStatus((prev: VaultStatus | null) => (prev ? { ...prev, isLocked: true } : prev));
+					setLocked(true);
+				})
+				.catch(() => {
+					// Throttle retries: repeated lock failures are serialized
+					// with storage writes in the backend queue, so retrying
+					// every second can starve normal operations.
+					autoLockRetryAfterRef.current = Date.now() + 30_000;
+				})
+				.finally(() => {
+					autoLockInFlightRef.current = false;
+				});
 		}, 1000);
 		return () => window.clearInterval(id);
 	}, [settings.autoLock, locked]);
