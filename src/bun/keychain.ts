@@ -1,12 +1,13 @@
 import { createHash, randomBytes } from "node:crypto"
 import { spawn } from "node:child_process"
-import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises"
 import { homedir, platform } from "node:os"
 import path from "node:path"
 
 export interface KeyStorage {
 	readonly kind: "os-keychain" | "file-encrypted"
 	readonly detail: string
+	findKey(): Promise<Uint8Array | null>
 	getKey(): Promise<Uint8Array>
 }
 
@@ -101,7 +102,7 @@ class MacKeyStorage implements KeyStorage {
 	readonly kind = "os-keychain" as const
 	readonly detail = "macOS Keychain (security CLI)"
 
-	async getKey(): Promise<Uint8Array> {
+	async findKey(): Promise<Uint8Array | null> {
 		const find = await run("security", [
 			"find-generic-password",
 			"-s",
@@ -110,10 +111,19 @@ class MacKeyStorage implements KeyStorage {
 			ACCOUNT,
 			"-w",
 		])
-		if (find.code === 0) {
-			const existing = decodeKeyHex(find.stdout)
-			if (existing) return existing
+		if (find.code !== 0) return null
+		const existing = decodeKeyHex(find.stdout)
+		if (!existing) {
+			throw new StorageBackendUnavailableError(
+				"macOS Keychain entry is malformed",
+			)
 		}
+		return existing
+	}
+
+	async getKey(): Promise<Uint8Array> {
+		const existing = await this.findKey()
+		if (existing) return existing
 
 		const key = randomBytes(KEY_SIZE)
 		const add = await run(
@@ -192,7 +202,7 @@ class DpapiKeyStorage implements KeyStorage {
 		return this.scriptPath
 	}
 
-	async getKey(): Promise<Uint8Array> {
+	async findKey(): Promise<Uint8Array | null> {
 		const script = await this.ensureScript()
 
 		const read = await run("powershell.exe", [
@@ -207,18 +217,24 @@ class DpapiKeyStorage implements KeyStorage {
 			"-Path",
 			this.keyPath,
 		])
-		if (read.code === 0) {
-			const existing = decodeKeyBase64(read.stdout)
-			if (existing) return existing
-			throw new StorageBackendUnavailableError(
-				"DPAPI key file returned malformed data",
-			)
-		}
-		if (read.code !== DPAPI_EXIT_KEY_MISSING) {
+		if (read.code === DPAPI_EXIT_KEY_MISSING) return null
+		if (read.code !== 0) {
 			throw new StorageBackendUnavailableError(
 				`DPAPI key file could not be read (exit code ${read.code}): ${read.stderr.trim()}`,
 			)
 		}
+		const existing = decodeKeyBase64(read.stdout)
+		if (!existing) {
+			throw new StorageBackendUnavailableError(
+				"DPAPI key file returned malformed data",
+			)
+		}
+		return existing
+	}
+
+	async getKey(): Promise<Uint8Array> {
+		const existing = await this.findKey()
+		if (existing) return existing
 
 		const key = randomBytes(KEY_SIZE)
 		const write = await run(
