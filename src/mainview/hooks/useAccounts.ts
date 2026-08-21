@@ -35,14 +35,17 @@ export function useAccounts(): UseAccountsResult {
 	const [reloadToken, setReloadToken] = useState(0);
 	const accountsRef = useRef<Account[]>([]);
 
-	const persist = useCallback(async (next: Account[]) => {
+	const persist = useCallback(async (next: Account[], isStale?: () => boolean) => {
+		if (isStale?.()) return;
 		try {
 			await storage.saveVault(next);
 		} catch (err) {
+			if (isStale?.()) return;
 			const message = toErrorMessage(err);
 			setError(message);
 			throw err;
 		}
+		if (isStale?.()) return;
 		accountsRef.current = next;
 		setAccounts(next);
 		setError(null);
@@ -72,7 +75,9 @@ export function useAccounts(): UseAccountsResult {
 				let next: Account[];
 				if (stored === null) {
 					next = createMockAccounts();
-					await persist(next);
+					if (cancelled) return;
+					await persist(next, () => cancelled);
+					if (cancelled) return;
 				} else {
 					next = stored;
 					accountsRef.current = next;
