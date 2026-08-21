@@ -60,7 +60,7 @@ function updateTrayTitle() {
 	tray.setTitle(formatTrayTitle(accountCount));
 }
 
-function restoreWindow() {
+function restoreWindow(): boolean {
 	if (mainWindow && (BrowserWindow as unknown as { getById: (id: number) => unknown }).getById(mainWindow.id)) {
 		try {
 			// If minimized, restore first
@@ -69,7 +69,7 @@ function restoreWindow() {
 			}
 			mainWindow.show();
 			mainWindow.activate();
-			return;
+			return false;
 		} catch {
 			// fall through to recreate
 		}
@@ -88,7 +88,9 @@ function restoreWindow() {
 			},
 		});
 		// Re-attach window event handling for new window if needed
+		return true;
 	}
+	return false;
 }
 
 function hideWindow() {
@@ -178,10 +180,11 @@ try {
 		if (action === "lock") {
 			// Restore or recreate the window before dispatching lock so the
 			// newly created webview receives the message in a locked state.
-			restoreWindow();
+			const didRecreate = restoreWindow();
 			const sendLock = () => {
 				try {
 					// Prefer typed RPC message (bun -> webview)
+					let sentViaRpc = false;
 					if (
 						rpc &&
 						typeof (rpc as unknown as { send?: unknown }).send === "function"
@@ -189,8 +192,10 @@ try {
 						const send = (rpc as unknown as { send: Record<string, (p?: unknown) => void> }).send;
 						if (typeof send["tray:lock"] === "function") {
 							send["tray:lock"]();
+							sentViaRpc = true;
 						}
 					}
+					if (sentViaRpc) return;
 					// Fallback: direct JS dispatch for immediate effect and for tests
 					const view: unknown = mainWindow?.webview;
 					if (
@@ -207,8 +212,8 @@ try {
 				}
 			};
 			sendLock();
-			// Retry once after the new window's webview finishes loading
-			setTimeout(sendLock, 600);
+			// Retry only when window was recreated and webview is still loading
+			if (didRecreate) setTimeout(sendLock, 600);
 			return;
 		}
 		if (action === "quit") {
