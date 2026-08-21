@@ -15,6 +15,7 @@ const ACCOUNT = "vault-key"
 const WINDOWS_TARGET = "PR5Auth/vault-key"
 const KEY_SIZE = 32
 const COMMAND_TIMEOUT_MS = 20_000
+const DPAPI_EXIT_KEY_MISSING = 3
 
 export class StorageBackendUnavailableError extends Error {
 	constructor(message: string) {
@@ -146,9 +147,9 @@ const DPAPI_PS1 = `param(
 Add-Type -AssemblyName System.Security
 
 if ($Action -eq 'read') {
-    if (-not (Test-Path -LiteralPath $Path)) { exit 1 }
-    $blob = [IO.File]::ReadAllBytes($Path)
+    if (-not (Test-Path -LiteralPath $Path)) { exit ${DPAPI_EXIT_KEY_MISSING} }
     try {
+        $blob = [IO.File]::ReadAllBytes($Path)
         $clear = [System.Security.Cryptography.ProtectedData]::Unprotect(
             $blob, $null,
             [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
@@ -209,6 +210,14 @@ class DpapiKeyStorage implements KeyStorage {
 		if (read.code === 0) {
 			const existing = decodeKeyBase64(read.stdout)
 			if (existing) return existing
+			throw new StorageBackendUnavailableError(
+				"DPAPI key file returned malformed data",
+			)
+		}
+		if (read.code !== DPAPI_EXIT_KEY_MISSING) {
+			throw new StorageBackendUnavailableError(
+				`DPAPI key file could not be read (exit code ${read.code}): ${read.stderr.trim()}`,
+			)
 		}
 
 		const key = randomBytes(KEY_SIZE)
