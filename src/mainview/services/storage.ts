@@ -235,6 +235,7 @@ export class RpcStorageProvider implements StorageProvider, StorageStatusProvide
 export class VaultStorage {
 	private provider: StorageProvider
 	private ready: Promise<void>
+	private pendingLegacy: { vault: string | null; settings: string | null } | null = null
 
 	constructor(provider: StorageProvider = new RpcStorageProvider()) {
 		this.provider = provider
@@ -243,6 +244,7 @@ export class VaultStorage {
 
 	async loadVault(): Promise<Account[] | null> {
 		await this.ready
+		await this.ensureLegacyMigrated()
 		const raw = await this.provider.getItem(VAULT_KEY)
 		if (raw === null) return null
 		return deserializeVault(raw)
@@ -250,16 +252,19 @@ export class VaultStorage {
 
 	async saveVault(accounts: Account[]): Promise<void> {
 		await this.ready
+		await this.ensureLegacyMigrated()
 		await this.provider.setItem(VAULT_KEY, serializeVault(accounts))
 	}
 
 	async clearVault(): Promise<void> {
 		await this.ready
+		await this.ensureLegacyMigrated()
 		await this.provider.removeItem(VAULT_KEY)
 	}
 
 	async loadSettings(): Promise<AppSettings> {
 		await this.ready
+		await this.ensureLegacyMigrated()
 		const raw = await this.provider.getItem(SETTINGS_KEY)
 		if (raw === null) return { ...DEFAULT_SETTINGS }
 		try {
@@ -271,16 +276,19 @@ export class VaultStorage {
 
 	async saveSettings(settings: AppSettings): Promise<void> {
 		await this.ready
+		await this.ensureLegacyMigrated()
 		await this.provider.setItem(SETTINGS_KEY, JSON.stringify(settings))
 	}
 
 	async reset(): Promise<void> {
 		await this.ready
+		await this.ensureLegacyMigrated()
 		await this.provider.reset()
 	}
 
 	async getStatus(): Promise<StorageStatus> {
 		await this.ready
+		await this.ensureLegacyMigrated()
 		if (isStorageStatusProvider(this.provider)) {
 			return this.provider.getStatus()
 		}
@@ -292,12 +300,38 @@ export class VaultStorage {
 		}
 	}
 
-	private async migrateLegacyData(): Promise<void> {
+	private isRecoverableMigrationError(err: unknown): boolean {
+		return (
+			err instanceof StorageError &&
+			(err.code === "unavailable" || err.code === "denied")
+		)
+	}
+
+	private async ensureLegacyMigrated(): Promise<void> {
+		if (!this.pendingLegacy) return
 		if (!isStorageStatusProvider(this.provider)) return
+		// Only retry when encrypted storage is actually available (e.g. after
+		// a master password is created when the OS key backend is missing).
+		try {
+			const status = await this.provider.getStatus()
+			if (!status.available) return
+		} catch {
+			return
+		}
+		const { vault, settings } = this.pendingLegacy
+		try {
+			await this.performLegacyMigration(vault, settings)
+			this.pendingLegacy = null
+		} catch (err) {
+			if (this.isRecoverableMigrationError(err)) return
+			throw err
+		}
+	}
 
-		const legacyVault = localStorageAdapter.getItem(VAULT_KEY)
-		const legacySettings = localStorageAdapter.getItem(SETTINGS_KEY)
-
+	private async performLegacyMigration(
+		legacyVault: string | null,
+		legacySettings: string | null,
+	): Promise<void> {
 		const migrated: string[] = []
 		if (legacyVault !== null) {
 			const existing = await this.provider.getItem(VAULT_KEY)
@@ -313,7 +347,6 @@ export class VaultStorage {
 			}
 			migrated.push(SETTINGS_KEY)
 		}
-
 		for (const key of migrated) {
 			localStorageAdapter.removeItem(key)
 		}
@@ -321,6 +354,44 @@ export class VaultStorage {
 			console.log(
 				`[storage] Migrated ${migrated.length} legacy key(s) to encrypted storage`,
 			)
+		}
+	}
+
+	private async migrateLegacyData(): Promise<void> {
+		if (!isStorageStatusProvider(this.provider)) return
+
+		const legacyVault = localStorageAdapter.getItem(VAULT_KEY)
+		const legacySettings = localStorageAdapter.getItem(SETTINGS_KEY)
+		if (legacyVault === null && legacySettings === null) return
+
+		// If encrypted storage is not yet available (e.g. new install without
+		// an OS key backend and before a vault password is created), defer the
+		// one-time localStorage migration and retry after the vault becomes
+		// available. Without this, the rejected `ready` promise is retained by
+		// VaultStorage and the React reload after password creation cannot
+		// restore storage.
+		try {
+			const status = await this.provider.getStatus()
+			if (!status.available) {
+				this.pendingLegacy = { vault: legacyVault, settings: legacySettings }
+				return
+			}
+		} catch (err) {
+			if (this.isRecoverableMigrationError(err)) {
+				this.pendingLegacy = { vault: legacyVault, settings: legacySettings }
+				return
+			}
+			throw err
+		}
+
+		try {
+			await this.performLegacyMigration(legacyVault, legacySettings)
+		} catch (err) {
+			if (this.isRecoverableMigrationError(err)) {
+				this.pendingLegacy = { vault: legacyVault, settings: legacySettings }
+				return
+			}
+			throw err
 		}
 	}
 }
