@@ -75,6 +75,14 @@ export function Settings({
 								onSettingsChange({ ...settings, minimizeToTray })
 							}
 							label="Minimize to tray"
+							description="Keep running in the system tray when minimized."
+						/>
+						<Toggle
+							checked={settings.closeToTray}
+							onChange={(closeToTray) =>
+								onSettingsChange({ ...settings, closeToTray })
+							}
+							label="Close to tray"
 							description="Keep running in the system tray when the window is closed."
 						/>
 					</div>

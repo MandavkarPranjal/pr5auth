@@ -47,6 +47,7 @@ const localStorageAdapter: StorageAdapter = {
 export const DEFAULT_SETTINGS: AppSettings = {
 	autoLock: true,
 	minimizeToTray: false,
+	closeToTray: false,
 }
 
 export function isSecureStorageAvailable(): boolean {
@@ -63,17 +64,63 @@ interface SecureStorageRpcClient {
 		"storage:removeItem": (params: { key: string }) => Promise<void>
 		"storage:status": () => Promise<StorageStatus>
 		"storage:reset": () => Promise<void>
+		"tray:updateCount": (params: { count: number }) => Promise<void>
+		"tray:updateSettings": (params: {
+			minimizeToTray: boolean
+			closeToTray: boolean
+		}) => Promise<void>
 	}
 }
 
+let sharedRpc: SecureStorageRpcClient | null | undefined
+
 function connectRpc(): SecureStorageRpcClient | null {
-	if (!isSecureStorageAvailable()) return null
+	if (sharedRpc !== undefined) return sharedRpc
+	if (!isSecureStorageAvailable()) {
+		sharedRpc = null
+		return sharedRpc
+	}
 	const rpc = Electroview.defineRPC<SecureStorageSchema>({
 		maxRequestTime: 10000,
-		handlers: { requests: {}, messages: {} },
+		handlers: {
+			requests: {},
+			messages: {
+				"tray:lock": () => {
+					window.dispatchEvent(new CustomEvent("pr5auth:lock"))
+				},
+			},
+		},
 	})
 	new Electroview({ rpc })
-	return rpc as unknown as SecureStorageRpcClient
+	sharedRpc = rpc as unknown as SecureStorageRpcClient
+	return sharedRpc
+}
+
+export function getTrayRpc(): SecureStorageRpcClient | null {
+	return connectRpc()
+}
+
+export async function notifyTrayCount(count: number): Promise<void> {
+	const rpc = connectRpc()
+	if (!rpc) return
+	try {
+		await rpc.request["tray:updateCount"]({ count })
+	} catch {
+		// ignore — tray may not be available outside desktop app
+	}
+}
+
+export async function notifyTraySettings(settings: AppSettings): Promise<void> {
+	const rpc = connectRpc()
+	if (!rpc) return
+	try {
+		await rpc.request["tray:updateSettings"]({
+			minimizeToTray: settings.minimizeToTray,
+			closeToTray: settings.closeToTray,
+		})
+	} catch {
+		// ignore
+	}
 }
 
 export class RpcStorageProvider implements StorageProvider, StorageStatusProvider {

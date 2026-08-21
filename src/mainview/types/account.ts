@@ -25,6 +25,7 @@ export interface AddAccountInput {
 export interface AppSettings {
 	autoLock: boolean;
 	minimizeToTray: boolean;
+	closeToTray: boolean;
 }
 
 export type Page = "dashboard" | "import" | "settings";
