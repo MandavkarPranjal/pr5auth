@@ -194,39 +194,69 @@ export class VaultManager {
 	}
 
 	private async migrateVaultData(oldKey: Uint8Array, newKey: Uint8Array): Promise<void> {
-		// Re-encrypt all .enc files that can be decrypted with oldKey.
-		// Files that are plaintext salt/meta are ignored.
-		// We use the same file naming as EncryptedFileStorageProvider: base64url(key).enc
-		// So re-encryption simply tries to read, decrypt, re-encrypt.
+		const { readdir, readFile, writeFile } = await import("node:fs/promises")
+		const isEnoent = (err: unknown): boolean => (err as NodeJS.ErrnoException).code === "ENOENT"
+		let entries: string[]
 		try {
-			const { readdir, readFile, writeFile } = await import("node:fs/promises")
-			const entries = await readdir(this.dataDir)
-			for (const entry of entries) {
-				if (!entry.endsWith(".enc")) continue
-				const full = path.join(this.dataDir, entry)
-				try {
-					const raw = await readFile(full, "utf8")
-					let plaintext: string
-					try {
-						plaintext = decrypt(raw, oldKey)
-					} catch {
-						// Not encrypted with oldKey (maybe OS key) – skip
-						continue
-					}
-					const reEncrypted = encrypt(plaintext, newKey)
-					// Write atomically via temp then rename
-					const tmp = `${full}.${Math.random().toString(36).slice(2)}.tmp`
-					await writeFile(tmp, reEncrypted, { mode: FILE_MODE })
-					await chmod(tmp, FILE_MODE)
-					const { rename } = await import("node:fs/promises")
-					await rename(tmp, full)
-				} catch {
-					// best effort
-					continue
-				}
+			entries = await readdir(this.dataDir)
+		} catch (err) {
+			if (isEnoent(err)) return
+			throw new StorageError(`Vault migration failed to list vault: ${(err as Error).message}`, "io")
+		}
+		const encEntries = entries.filter((entry) => entry.endsWith(".enc"))
+		if (encEntries.length === 0) return
+
+		// Phase 1: verify every .enc file is decryptable with oldKey and prepare
+		// re-encrypted payloads. We do not write anything until all files are
+		// verified so a single skipped/lost file does not orphan data after the
+		// meta swap (old password would no longer match new salt).
+		const pending: { full: string; tmp: string; payload: string }[] = []
+		for (const entry of encEntries) {
+			const full = path.join(this.dataDir, entry)
+			let raw: string
+			try {
+				raw = await readFile(full, "utf8")
+			} catch (err) {
+				if (isEnoent(err)) continue
+				throw new StorageError(`Vault migration failed to read ${entry}: ${(err as Error).message}`, "io")
 			}
-		} catch {
-			// ignore migration errors
+			let plaintext: string
+			try {
+				plaintext = decrypt(raw, oldKey)
+			} catch (err) {
+				throw new StorageError(
+					`Vault migration failed for ${entry}: ${(err as Error).message} — file not decryptable with current key, aborting to avoid orphaning data`,
+					"unrecoverable",
+				)
+			}
+			const reEncrypted = encrypt(plaintext, newKey)
+			const tmp = `${full}.${Math.random().toString(36).slice(2)}.tmp`
+			pending.push({ full, tmp, payload: reEncrypted })
+		}
+
+		// Phase 2: write all re-encrypted payloads to temp files. No renames yet,
+		// so a crash here leaves original .enc files untouched.
+		try {
+			for (const item of pending) {
+				await writeFile(item.tmp, item.payload, { mode: FILE_MODE })
+				await chmod(item.tmp, FILE_MODE)
+			}
+		} catch (err) {
+			await Promise.all(pending.map((p) => unlink(p.tmp).catch(() => {})))
+			throw new StorageError(`Vault migration failed to stage re-encrypted files: ${(err as Error).message}`, "io")
+		}
+
+		// Phase 3: atomically replace each .enc file. Only after every rename
+		// succeeds do we consider migration complete; callers must not swap
+		// meta/keys before this point.
+		try {
+			const { rename } = await import("node:fs/promises")
+			for (const item of pending) {
+				await rename(item.tmp, item.full)
+			}
+		} catch (err) {
+			await Promise.all(pending.map((p) => unlink(p.tmp).catch(() => {})))
+			throw new StorageError(`Vault migration failed to commit re-encrypted files: ${(err as Error).message}`, "io")
 		}
 	}
 
