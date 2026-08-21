@@ -136,7 +136,22 @@ const rpc = BrowserView.defineRPC<SecureStorageSchema>({
 			"vault:createPassword": async ({ password }) => {
 				const vm = getVaultManager()
 				if (!vm) throw new Error("Vault manager unavailable")
-				await vm.createMasterPassword(password)
+				// Migrate existing fallback-encrypted data (e.g. SETTINGS_KEY) to the
+				// new Argon2 key. Without this, VaultLockedStorageProvider.getKey()
+				// would switch from the OS-keychain key to the Argon2 key while
+				// .enc files remain encrypted with the old key and become
+				// undecryptable (unrecoverable). Mirror changePassword's
+				// migrateVaultData but with the fallback key as source.
+				let fallbackKey: Uint8Array | undefined
+				try {
+					const backend = storageBackend as unknown as { fallback?: { getRawKey: () => Promise<Uint8Array> } }
+					if (backend?.fallback?.getRawKey) {
+						fallbackKey = await backend.fallback.getRawKey()
+					}
+				} catch {
+					// no fallback or unavailable — nothing to migrate
+				}
+				await vm.createMasterPassword(password, undefined, fallbackKey)
 			},
 			"vault:unlock": async ({ password }) => {
 				const vm = getVaultManager()
