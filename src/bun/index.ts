@@ -184,7 +184,7 @@ try {
 					// Prefer typed RPC message (bun -> webview)
 					if (
 						rpc &&
-						typeof (rpc as unknown as { send?: unknown }).send === "object"
+						typeof (rpc as unknown as { send?: unknown }).send === "function"
 					) {
 						const send = (rpc as unknown as { send: Record<string, (p?: unknown) => void> }).send;
 						if (typeof send["tray:lock"] === "function") {
