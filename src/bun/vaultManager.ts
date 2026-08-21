@@ -107,6 +107,27 @@ export class VaultManager {
 		}
 		if (fallbackKey) {
 			await this.migrateVaultData(fallbackKey, key)
+		} else {
+			// When the OS key backend is unavailable we have no source key to
+			// migrate from. If legacy `.enc` files already exist, creating a
+			// password without migrating would switch all future reads to the
+			// new Argon2 key while ciphertext remains encrypted with the old
+			// OS key, making vault data permanently unrecoverable. Refuse in
+			// that state — caller must recover the original key or reset.
+			const isEnoent = (err: unknown): boolean => (err as NodeJS.ErrnoException).code === "ENOENT"
+			let hasLegacyFiles = false
+			try {
+				const entries = await readdir(this.dataDir)
+				hasLegacyFiles = entries.some((entry) => entry.endsWith(".enc"))
+			} catch (err) {
+				if (!isEnoent(err)) throw err
+			}
+			if (hasLegacyFiles) {
+				throw new StorageError(
+					"Cannot create master password: encrypted vault data exists but the OS key backend is unavailable. Recover the original key or reset the vault before setting a password.",
+					"unavailable",
+				)
+			}
 		}
 		await this.saveMeta(meta)
 		this.key = key
