@@ -10,6 +10,21 @@ const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
 
 const storageBackend = await createSecureStorageBackend();
 
+// Serialize storage writes with password-change migrations. Without this,
+// a concurrent setItem can read the old key, migration re-encrypts the file
+// with the new key, then the stale write overwrites it with old-key
+// ciphertext before the manager installs the new key, leaving the file
+// permanently undecryptable.
+let vaultOpQueue: Promise<void> = Promise.resolve();
+function withVaultSerial<T>(fn: () => Promise<T>): Promise<T> {
+	const task = vaultOpQueue.then(fn, fn);
+	vaultOpQueue = task.then(
+		() => undefined,
+		() => undefined,
+	);
+	return task;
+}
+
 // Helper to get VaultManager if present
 function getVaultManager(): import("./vaultManager").VaultManager | null {
 	const vb = storageBackend as unknown as { getVaultManager?: () => import("./vaultManager").VaultManager }
@@ -116,10 +131,10 @@ const rpc = BrowserView.defineRPC<SecureStorageSchema>({
 		requests: {
 			"storage:getItem": async ({ key }) => storageBackend.getItem(key),
 			"storage:setItem": async ({ key, value }) =>
-				storageBackend.setItem(key, value),
-			"storage:removeItem": async ({ key }) => storageBackend.removeItem(key),
+				withVaultSerial(() => storageBackend.setItem(key, value)),
+			"storage:removeItem": async ({ key }) => withVaultSerial(() => storageBackend.removeItem(key)),
 			"storage:status": async () => storageBackend.getStatus(),
-			"storage:reset": async () => storageBackend.reset(),
+			"storage:reset": async () => withVaultSerial(() => storageBackend.reset()),
 			"tray:updateCount": async ({ count }) => {
 				accountCount = count;
 				updateTrayTitle();
@@ -133,26 +148,27 @@ const rpc = BrowserView.defineRPC<SecureStorageSchema>({
 				if (!vm) return { hasPassword: false, isLocked: false }
 				return vm.getStatus()
 			},
-			"vault:createPassword": async ({ password }) => {
-				const vm = getVaultManager()
-				if (!vm) throw new Error("Vault manager unavailable")
-				// Migrate existing fallback-encrypted data (e.g. SETTINGS_KEY) to the
-				// new Argon2 key. Without this, VaultLockedStorageProvider.getKey()
-				// would switch from the OS-keychain key to the Argon2 key while
-				// .enc files remain encrypted with the old key and become
-				// undecryptable (unrecoverable). Mirror changePassword's
-				// migrateVaultData but with the fallback key as source.
-				let fallbackKey: Uint8Array | undefined
-				try {
-					const backend = storageBackend as unknown as { fallback?: { getRawKey: () => Promise<Uint8Array> } }
-					if (backend?.fallback?.getRawKey) {
-						fallbackKey = await backend.fallback.getRawKey()
+			"vault:createPassword": async ({ password }) =>
+				withVaultSerial(async () => {
+					const vm = getVaultManager()
+					if (!vm) throw new Error("Vault manager unavailable")
+					// Migrate existing fallback-encrypted data (e.g. SETTINGS_KEY) to the
+					// new Argon2 key. Without this, VaultLockedStorageProvider.getKey()
+					// would switch from the OS-keychain key to the Argon2 key while
+					// .enc files remain encrypted with the old key and become
+					// undecryptable (unrecoverable). Mirror changePassword's
+					// migrateVaultData but with the fallback key as source.
+					let fallbackKey: Uint8Array | undefined
+					try {
+						const backend = storageBackend as unknown as { fallback?: { getRawKey: () => Promise<Uint8Array> } }
+						if (backend?.fallback?.getRawKey) {
+							fallbackKey = await backend.fallback.getRawKey()
+						}
+					} catch {
+						// no fallback or unavailable — nothing to migrate
 					}
-				} catch {
-					// no fallback or unavailable — nothing to migrate
-				}
-				await vm.createMasterPassword(password, undefined, fallbackKey)
-			},
+					await vm.createMasterPassword(password, undefined, fallbackKey)
+				}),
 			"vault:unlock": async ({ password }) => {
 				const vm = getVaultManager()
 				if (!vm) throw new Error("Vault manager unavailable")
@@ -163,18 +179,20 @@ const rpc = BrowserView.defineRPC<SecureStorageSchema>({
 				if (!vm) return
 				vm.lock()
 			},
-			"vault:changePassword": async ({ oldPassword, newPassword }) => {
-				const vm = getVaultManager()
-				if (!vm) throw new Error("Vault manager unavailable")
-				await vm.changePassword(oldPassword, newPassword)
-			},
-			"vault:reset": async () => {
-				// Delete encrypted data before metadata so a failure does not
-				// orphan files without their password metadata.
-				await storageBackend.reset()
-				const vm = getVaultManager()
-				if (vm) await vm.reset()
-			},
+			"vault:changePassword": async ({ oldPassword, newPassword }) =>
+				withVaultSerial(async () => {
+					const vm = getVaultManager()
+					if (!vm) throw new Error("Vault manager unavailable")
+					await vm.changePassword(oldPassword, newPassword)
+				}),
+			"vault:reset": async () =>
+				withVaultSerial(async () => {
+					// Delete encrypted data before metadata so a failure does not
+					// orphan files without their password metadata.
+					await storageBackend.reset()
+					const vm = getVaultManager()
+					if (vm) await vm.reset()
+				}),
 		},
 	},
 });
