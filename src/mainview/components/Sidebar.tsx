@@ -18,14 +18,14 @@ const NAV_ITEMS: { page: Page; label: string; icon: typeof LayoutGrid }[] = [
 
 export function Sidebar({ page, onNavigate, accountCount, locked }: SidebarProps) {
 	return (
-		<aside className="flex h-full w-60 shrink-0 flex-col border-r border-white/[0.06] bg-[#0B0E16]/80 backdrop-blur-xl">
+		<aside className="app-sidebar flex h-full w-60 shrink-0 flex-col border-r border-white/[0.03] bg-black">
 			<div className="flex items-center gap-3 px-5 pt-6 pb-8">
-				<div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 shadow-lg shadow-indigo-950/60">
-					<ShieldCheck className="h-5 w-5 text-white" />
+				<div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white">
+					<ShieldCheck className="h-5 w-5 text-zinc-900" />
 				</div>
 				<div>
 					<h1 className="text-lg font-semibold tracking-tight text-white">
-						PR5<span className="text-indigo-400">Auth</span>
+						PR5<span className="text-neutral-300">Auth</span>
 					</h1>
 					<p className="text-[11px] font-medium tracking-wide text-slate-500">
 						OFFLINE AUTHENTICATOR
@@ -41,19 +41,19 @@ export function Sidebar({ page, onNavigate, accountCount, locked }: SidebarProps
 						<button
 							key={item.page}
 							onClick={() => onNavigate(item.page)}
-							className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+							className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
 								active
-									? "bg-indigo-500/15 text-indigo-300 shadow-inner shadow-indigo-950/40"
-									: "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
+									? "bg-black text-white"
+									: "text-slate-400 hover:bg-white/[0.03] hover:text-white"
 							}`}
 							aria-current={active ? "page" : undefined}
 							aria-label={item.label}
 						>
 							<Icon
-								className={`h-[18px] w-[18px] transition-colors ${
+								className={`h-[16px] w-[16px] transition-colors ${
 									active
-										? "text-indigo-400"
-										: "text-slate-500 group-hover:text-slate-300"
+										? "text-white"
+										: "text-slate-400 group-hover:text-white"
 								}`}
 							/>
 							<span>{item.label}</span>
@@ -61,7 +61,7 @@ export function Sidebar({ page, onNavigate, accountCount, locked }: SidebarProps
 								<span
 									className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums ${
 										active
-											? "bg-indigo-500/20 text-indigo-300"
+											? "bg-white/10 text-neutral-200"
 											: "bg-white/[0.06] text-slate-500"
 									}`}
 								>
@@ -74,20 +74,20 @@ export function Sidebar({ page, onNavigate, accountCount, locked }: SidebarProps
 			</nav>
 
 			<div className="space-y-3 px-3 pb-5">
-				<div className="flex items-center gap-2 rounded-lg border border-emerald-500/15 bg-emerald-500/[0.07] px-3 py-2">
+				<div className="flex items-center gap-2 rounded-lg border border-white/[0.03] px-3 py-2">
 					<span
 						className={`h-2 w-2 rounded-full ${
-							locked ? "bg-amber-400" : "bg-emerald-400"
-						} shadow-[0_0_8px] shadow-emerald-400/60`}
+							locked ? "bg-red-400" : "bg-green-400"
+						}`}
 					/>
-					<span className="text-[11px] font-medium text-emerald-200/90">
+					<span className="text-[11px] font-medium text-slate-400">
 						{locked ? "Locked" : "Vault secured"}
 					</span>
 				</div>
-				<p className="px-1 text-[10px] font-medium tracking-wider text-slate-600">
+				<p className="px-1 text-[10px] font-medium text-slate-400">
 					PR5AUTH v{APP_VERSION} · LOCAL ONLY
 				</p>
-				<p className="px-1 text-[10px] text-slate-700">Shortcuts: ⌘/Ctrl K search · N add</p>
+				<p className="px-1 text-[10px] text-slate-500">Shortcuts: ⌘/Ctrl K search · N add</p>
 			</div>
 		</aside>
 	);

@@ -158,7 +158,7 @@ export function ImportWizard({ existingAccounts, onImport, onClose }: ImportWiza
 								<span
 									className={`rounded-full px-3 py-1 text-xs font-medium ${
 										isActive
-											? "bg-indigo-600 text-white"
+											? "bg-white text-zinc-900"
 											: isPast
 												? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/20"
 												: "bg-white/[0.04] text-slate-500 border border-white/[0.06]"
@@ -189,7 +189,7 @@ export function ImportWizard({ existingAccounts, onImport, onClose }: ImportWiza
 									onClick={() => setSourceTab(tab.id as SourceTab)}
 									className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all ${
 										active
-											? "bg-indigo-600 text-white shadow-lg shadow-indigo-950/40"
+											? "bg-white text-zinc-900"
 											: "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
 									}`}
 								>
@@ -216,7 +216,7 @@ export function ImportWizard({ existingAccounts, onImport, onClose }: ImportWiza
 								onChange={(e) => setOtpauthInput(e.target.value)}
 								rows={5}
 								placeholder={`otpauth://totp/GitHub:dev@example.com?secret=JBSWY3DPEHPK3PXP&issuer=GitHub\n otpauth://totp/Google:you@gmail.com?secret=GEZDGNBVGY3TQOJQ...`}
-								className="w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-3 font-mono text-xs leading-relaxed text-slate-300 placeholder:text-slate-600 outline-none transition-all focus:border-indigo-500/40 focus:shadow-[0_0_0_3px] focus:shadow-indigo-500/10"
+								className="w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-3 font-mono text-xs leading-relaxed text-slate-300 placeholder:text-slate-600 outline-none transition-all focus:border-white/30 focus:shadow-[0_0_0_3px] focus:shadow-white/10"
 							/>
 							{otpauthPreview && (
 								<div
@@ -244,7 +244,7 @@ export function ImportWizard({ existingAccounts, onImport, onClose }: ImportWiza
 								<button
 									onClick={() => canProceedToPreview && setStep("preview")}
 									disabled={!canProceedToPreview}
-									className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-950/50 transition-all hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+									className="flex items-center gap-2 rounded-xl bg-white text-zinc-900 px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-40"
 								>
 									Continue <ChevronRight className="h-4 w-4" />
 								</button>
@@ -262,18 +262,18 @@ export function ImportWizard({ existingAccounts, onImport, onClose }: ImportWiza
 							</div>
 							<div
 								onClick={() => qrFileInputRef.current?.click()}
-								className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-white/[0.1] bg-white/[0.02] p-8 text-center transition-all hover:border-indigo-500/30 hover:bg-white/[0.04]"
+								className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-white/[0.1] bg-white/[0.02] p-8 text-center transition-all hover:border-white/25 hover:bg-white/[0.04]"
 							>
 								<input ref={qrFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { void handleQrFile(e.target.files?.[0]); e.target.value = ""; }} />
 								{qrScanning ? (
 									<>
-										<Loader2 className="h-10 w-10 animate-spin text-indigo-400" />
+										<Loader2 className="h-10 w-10 animate-spin text-neutral-300" />
 										<p className="mt-4 text-sm font-medium text-slate-300">Scanning QR code…</p>
 									</>
 								) : (
 									<>
-										<div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-500/10">
-											<ImageUp className="h-6 w-6 text-indigo-400" />
+										<div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10">
+											<ImageUp className="h-6 w-6 text-neutral-300" />
 										</div>
 										<p className="mt-4 text-sm font-medium text-slate-200">Upload QR code image</p>
 										<p className="mt-1 max-w-xs text-xs leading-relaxed text-slate-500">PNG, JPEG and WebP supported · decoded offline</p>
@@ -362,12 +362,12 @@ export function ImportWizard({ existingAccounts, onImport, onClose }: ImportWiza
 					{/* Migration strategy */}
 					<div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5">
 						<h4 className="flex items-center gap-2 text-sm font-semibold text-slate-200">
-							<ShieldCheck className="h-4 w-4 text-indigo-400" /> Migration strategy
+							<ShieldCheck className="h-4 w-4 text-neutral-300" /> Migration strategy
 						</h4>
 						<p className="mt-1 text-xs text-slate-500">How should duplicates be handled? Nothing leaves this device.</p>
 						<div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
 							<label
-								className={`cursor-pointer rounded-xl border p-4 transition-all ${strategy === "merge" ? "border-indigo-500/40 bg-indigo-500/[0.08]" : "border-white/[0.07] bg-white/[0.02] hover:border-white/[0.12]"}`}
+								className={`cursor-pointer rounded-xl border p-4 transition-all ${strategy === "merge" ? "border-white/30 bg-white/[0.06]" : "border-white/[0.07] bg-white/[0.02] hover:border-white/[0.12]"}`}
 							>
 								<input type="radio" name="strategy" value="merge" checked={strategy === "merge"} onChange={() => setStrategy("merge")} className="sr-only" />
 								<p className="text-sm font-semibold text-slate-200">Merge — skip duplicates</p>
@@ -399,7 +399,7 @@ export function ImportWizard({ existingAccounts, onImport, onClose }: ImportWiza
 						<button
 							onClick={handleConfirmImport}
 							disabled={importing || (strategy === "merge" && totalUniques === 0 && totalDuplicates > 0)}
-							className="flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-950/50 transition-all hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+							className="flex items-center gap-2 rounded-xl bg-white text-zinc-900 px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-40"
 						>
 							{importing ? (
 								<>

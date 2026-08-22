@@ -20,20 +20,22 @@ export function Toggle({ checked, onChange, label, description, disabled }: Togg
 			}`}
 		>
 			<span className="min-w-0">
-				<span className="block text-sm font-medium text-slate-200">{label}</span>
+				<span className="block text-sm font-medium text-white">{label}</span>
 				{description && (
-					<span className="mt-0.5 block text-xs leading-relaxed text-slate-500">
+					<span className="mt-0.5 block text-xs leading-relaxed text-slate-400">
 						{description}
 					</span>
 				)}
 			</span>
 			<span
 				className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-300 ${
-					checked ? "bg-indigo-600" : "bg-white/[0.09]"
+					checked ? "bg-white" : "bg-white/[0.09]"
 				}`}
 			>
 				<span
-					className={`inline-block h-4.5 w-4.5 transform rounded-full bg-white shadow transition-transform duration-300 ${
+					className={`inline-block h-4.5 w-4.5 transform rounded-full transition-colors duration-300 ${
+						checked ? "bg-zinc-900" : "bg-white"
+					} transition-transform duration-300 ${
 						checked ? "translate-x-[22px]" : "translate-x-[3px]"
 					}`}
 				/>

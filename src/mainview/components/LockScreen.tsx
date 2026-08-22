@@ -66,7 +66,7 @@ export function LockScreen({ mode, onUnlock, onCreate }: LockScreenProps) {
 	return (
 		<div className="fixed inset-0 z-50 flex items-center justify-center bg-[#080A10] p-6">
 			<div className="animate-modal-in flex w-full max-w-sm flex-col items-center text-center">
-				<div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-indigo-500 to-indigo-700 shadow-2xl shadow-indigo-950/70">
+				<div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-white/10">
 					<Lock className="h-9 w-9 text-white" />
 				</div>
 				<h1 className="mt-6 text-2xl font-semibold tracking-tight text-white">
@@ -86,7 +86,7 @@ export function LockScreen({ mode, onUnlock, onCreate }: LockScreenProps) {
 							onChange={(e) => setPassword(e.target.value)}
 							placeholder={isCreate ? "Master password (≥8 chars)" : "Master password"}
 							autoFocus
-							className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 pr-10 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+							className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 pr-10 text-sm text-white placeholder:text-slate-500 focus:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/10"
 							disabled={loading}
 						/>
 						<button
@@ -105,7 +105,7 @@ export function LockScreen({ mode, onUnlock, onCreate }: LockScreenProps) {
 							value={confirm}
 							onChange={(e) => setConfirm(e.target.value)}
 							placeholder="Confirm password"
-							className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+							className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/10"
 							disabled={loading}
 						/>
 					)}
@@ -119,7 +119,7 @@ export function LockScreen({ mode, onUnlock, onCreate }: LockScreenProps) {
 					<button
 						type="submit"
 						disabled={loading || (isCreate ? !password || !confirm : !password)}
-						className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-950/50 transition-all duration-200 hover:bg-indigo-500 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+						className="flex w-full items-center justify-center gap-2 rounded-xl bg-white text-zinc-900 px-6 py-3 text-sm font-semibold text-white transition-all duration-200 hover:bg-neutral-200 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
 					>
 						<ShieldCheck className="h-4 w-4" />
 						{loading ? "Please wait…" : isCreate ? "Create & unlock" : "Unlock vault"}
