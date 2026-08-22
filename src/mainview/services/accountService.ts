@@ -187,6 +187,17 @@ export function isValidAccount(value: unknown): value is Account {
 	);
 }
 
+function isValidLegacyAccount(value: unknown): boolean {
+	if (typeof value !== "object" || value === null) return false;
+	const a = value as Partial<Account>;
+	return (
+		typeof a.issuer === "string" &&
+		typeof a.accountName === "string" &&
+		typeof a.secret === "string" &&
+		isValidSecret(a.secret)
+	);
+}
+
 export function downloadVaultFile(accounts: Account[], filename = "pr5auth-vault.json"): void {
 	const blob = new Blob([exportVault(accounts)], { type: "application/json" });
 	const url = URL.createObjectURL(blob);
@@ -516,7 +527,7 @@ export function parseJsonImport(json: string): JsonImportResult {
 	if (!Array.isArray(parsed)) {
 		const candidate = parsed as Partial<VaultFile>;
 		if (Array.isArray(candidate.accounts)) {
-			const accounts = (candidate.accounts as unknown[]).filter(isValidAccount) as Account[];
+			const accounts = (candidate.accounts as unknown[]).filter(isValidLegacyAccount) as Account[];
 			// Migrate older versions: accept version 1, but also migrate older without version
 			if (accounts.length > 0) {
 				// If vault is PR5Auth format, normalize accounts to ensure IDs/createdAt
