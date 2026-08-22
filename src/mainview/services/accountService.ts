@@ -262,11 +262,6 @@ export function parseOtpauthBatch(input: string): OtpauthBatchResult {
 					errors.push({ raw: rawUri, reason: err instanceof Error ? err.message : "Invalid otpauth URI or secret" });
 				}
 			}
-			// If matches didn't cover entire line and line isn't just URIs, treat remainder as error if no match
-			// (already handled by matches length check)
-			if (matches.join("").trim().length < trimmedLine.length && matches.length === 1 && trimmedLine !== matches[0]) {
-				// Line had extra content besides the URI – we already parsed the URI, so don't error
-			}
 		} else {
 			// No otpauth:// pattern found – try parsing the whole line as a URI
 			try {
