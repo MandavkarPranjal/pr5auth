@@ -55,8 +55,8 @@ export function PageSkeleton() {
 	return (
 		<div className="flex h-full items-center justify-center" aria-busy="true" aria-label="Loading">
 			<div className="flex flex-col items-center gap-3">
-				<div className="h-8 w-8 animate-spin rounded-full border-2 border-white/[0.08] border-t-indigo-500" aria-hidden="true" />
-				<p className="text-xs text-slate-500">Loading…</p>
+				<div className="h-8 w-8 animate-spin rounded-full border-2 border-white/[0.08] border-t-white/80" aria-hidden="true" />
+				<p className="text-xs text-white">Loading…</p>
 			</div>
 		</div>
 	);

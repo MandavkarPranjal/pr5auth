@@ -21,8 +21,8 @@ export function Dashboard({ accounts, onAdd, onDelete, onCopy }: DashboardProps)
 	const hasQuery = debouncedQuery.trim().length > 0;
 
 	return (
-		<div className="flex h-full flex-col">
-			<header className="flex flex-wrap items-center justify-between gap-4 pb-6">
+		<div className="dashboard-page flex h-full flex-col">
+			<header className="dashboard-header flex flex-wrap items-center justify-between gap-4 pb-6">
 				<div>
 					<h2 className="text-2xl font-semibold tracking-tight text-white">
 						Authenticator
@@ -31,13 +31,13 @@ export function Dashboard({ accounts, onAdd, onDelete, onCopy }: DashboardProps)
 						{visible.length} account{visible.length === 1 ? "" : "s"} · codes refresh automatically
 					</p>
 				</div>
-				<div className="flex items-center gap-3">
-					<div className="w-64">
+				<div className="dashboard-toolbar flex items-center gap-3">
+					<div className="dashboard-search w-64">
 						<SearchBar value={query} onChange={setQuery} />
 					</div>
 					<button
 						onClick={onAdd}
-						className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-950/50 transition-all duration-200 hover:bg-indigo-500 active:scale-[0.98]"
+						className="flex items-center gap-2 rounded-xl bg-white text-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-neutral-200 active:scale-[0.98]"
 					>
 						<Plus className="h-4 w-4" />
 						Add account
@@ -46,7 +46,7 @@ export function Dashboard({ accounts, onAdd, onDelete, onCopy }: DashboardProps)
 			</header>
 
 			{visible.length > 0 ? (
-				<div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
+				<div className="account-grid grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
 					{visible.map((account) => (
 						<AccountCard
 							key={account.id}

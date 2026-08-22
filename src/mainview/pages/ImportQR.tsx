@@ -79,8 +79,8 @@ export function ImportQR({ onAddParsed, onOpenModal }: ImportQRProps) {
 						onClick={() => fileInputRef.current?.click()}
 						className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed p-8 text-center transition-all duration-300 ${
 							dragOver
-								? "border-indigo-500/60 bg-indigo-500/[0.08]"
-								: "border-white/[0.1] bg-white/[0.02] hover:border-indigo-500/30 hover:bg-white/[0.04]"
+								? "border-white/40 bg-white/[0.06]"
+								: "border-white/[0.1] bg-white/[0.02] hover:border-white/25 hover:bg-white/[0.04]"
 						}`}
 					>
 						<input
@@ -95,15 +95,15 @@ export function ImportQR({ onAddParsed, onOpenModal }: ImportQRProps) {
 						/>
 						{scanning ? (
 							<>
-								<Loader2 className="h-10 w-10 animate-spin text-indigo-400" />
+								<Loader2 className="h-10 w-10 animate-spin text-neutral-300" />
 								<p className="mt-4 text-sm font-medium text-slate-300">
 									Scanning QR code…
 								</p>
 							</>
 						) : (
 							<>
-								<div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-500/10">
-									<ImageUp className="h-6 w-6 text-indigo-400" />
+								<div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10">
+									<ImageUp className="h-6 w-6 text-neutral-300" />
 								</div>
 								<p className="mt-4 text-sm font-medium text-slate-200">
 									Upload a QR code image
@@ -142,7 +142,7 @@ export function ImportQR({ onAddParsed, onOpenModal }: ImportQRProps) {
 							}}
 							rows={4}
 							placeholder="otpauth://totp/GitHub:dev@example.com?secret=JBSWY3DPEHPK3PXP&issuer=GitHub"
-							className="w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-3 font-mono text-xs leading-relaxed text-slate-300 placeholder:text-slate-600 outline-none transition-all focus:border-indigo-500/40 focus:shadow-[0_0_0_3px] focus:shadow-indigo-500/10"
+							className="w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-3 font-mono text-xs leading-relaxed text-slate-300 placeholder:text-slate-600 outline-none transition-all focus:border-white/30 focus:shadow-[0_0_0_3px] focus:shadow-white/10"
 						/>
 						{urlError && (
 							<p className="mt-2 text-xs text-red-400">{urlError}</p>

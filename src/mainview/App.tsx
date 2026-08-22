@@ -421,13 +421,7 @@ export default function App() {
 	const showError = error && !locked && !vaultLoading;
 
 	return (
-		<div className="flex h-screen w-screen overflow-hidden bg-[#0A0D14] text-slate-200 selection:bg-indigo-500/30">
-			{/* ambient background glow */}
-			<div className="pointer-events-none fixed inset-0 overflow-hidden">
-				<div className="absolute -top-40 left-1/4 h-96 w-96 rounded-full bg-indigo-600/[0.09] blur-[120px]" />
-				<div className="absolute -bottom-48 right-1/5 h-96 w-96 rounded-full bg-violet-600/[0.07] blur-[120px]" />
-			</div>
-
+		<div className="app-shell flex h-screen w-screen overflow-hidden bg-black text-white selection:bg-white/20">
 			<Sidebar
 				page={page}
 				onNavigate={handleNavigate}
@@ -435,8 +429,8 @@ export default function App() {
 				locked={locked}
 			/>
 
-			<main className="relative z-10 flex-1 overflow-hidden">
-				<div className="h-full overflow-y-auto p-8">
+			<main className="app-main relative z-10 flex-1 overflow-hidden">
+				<div className="page-scroll h-full overflow-y-auto p-8">
 					{showError && (
 						<div className="mb-4 flex items-start justify-between gap-4 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
 							<div>

@@ -235,7 +235,7 @@ export function Settings({
 				<section className="overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02] backdrop-blur-xl">
 					<div className="border-b border-white/[0.06] px-5 py-4">
 						<h3 className="flex items-center gap-2 text-sm font-semibold text-slate-200">
-							<Fingerprint className="h-4 w-4 text-indigo-400" />
+							<Fingerprint className="h-4 w-4 text-neutral-300" />
 							Security
 						</h3>
 					</div>
@@ -289,7 +289,7 @@ export function Settings({
 				<section className="overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02] backdrop-blur-xl">
 					<div className="border-b border-white/[0.06] px-5 py-4">
 						<h3 className="flex items-center gap-2 text-sm font-semibold text-slate-200">
-							<KeyRound className="h-4 w-4 text-indigo-400" />
+							<KeyRound className="h-4 w-4 text-neutral-300" />
 							Master password
 						</h3>
 					</div>
@@ -322,28 +322,28 @@ export function Settings({
 										value={oldPw}
 										onChange={(e) => setOldPw(e.target.value)}
 										placeholder="Current password"
-										className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+										className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/10"
 									/>
 									<input
 										type="password"
 										value={newPw}
 										onChange={(e) => setNewPw(e.target.value)}
 										placeholder="New password (≥8 chars)"
-										className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+										className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/10"
 									/>
 									<input
 										type="password"
 										value={newConfirm}
 										onChange={(e) => setNewConfirm(e.target.value)}
 										placeholder="Confirm new password"
-										className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+										className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/10"
 									/>
 									{vaultError && <p className="text-xs text-red-300">{vaultError}</p>}
 									{vaultMsg && <p className="text-xs text-emerald-300">{vaultMsg}</p>}
 									<button
 										type="submit"
 										disabled={vaultLoading}
-										className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+										className="rounded-xl bg-white text-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-200 disabled:opacity-50"
 									>
 										{vaultLoading ? "Updating…" : "Update password"}
 									</button>
@@ -367,7 +367,7 @@ export function Settings({
 				<section className="overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02] backdrop-blur-xl">
 					<div className="border-b border-white/[0.06] px-5 py-4">
 						<h3 className="flex items-center gap-2 text-sm font-semibold text-slate-200">
-							<ShieldCheck className="h-4 w-4 text-indigo-400" />
+							<ShieldCheck className="h-4 w-4 text-neutral-300" />
 							Backup & restore
 						</h3>
 					</div>
@@ -379,7 +379,7 @@ export function Settings({
 								setExportConfirm("");
 								setShowExportModal(true);
 							}}
-							className="flex flex-col items-start gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] p-4 text-left transition-all duration-200 hover:border-indigo-500/30 hover:bg-white/[0.05]"
+							className="flex flex-col items-start gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] p-4 text-left transition-all duration-200 hover:border-white/25 hover:bg-white/[0.05]"
 						>
 							<Download className="h-5 w-5 text-slate-400" />
 							<span className="text-sm font-medium text-slate-200">
@@ -392,7 +392,7 @@ export function Settings({
 
 						<button
 							onClick={() => fileInputRef.current?.click()}
-							className="flex flex-col items-start gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] p-4 text-left transition-all duration-200 hover:border-indigo-500/30 hover:bg-white/[0.05]"
+							className="flex flex-col items-start gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] p-4 text-left transition-all duration-200 hover:border-white/25 hover:bg-white/[0.05]"
 						>
 							<Upload className="h-5 w-5 text-slate-400" />
 							<span className="text-sm font-medium text-slate-200">
@@ -423,7 +423,7 @@ export function Settings({
 
 				<section className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5 backdrop-blur-xl">
 					<div className="flex items-start gap-3.5">
-						<div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 shadow-lg shadow-indigo-950/60">
+						<div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/10">
 							<ShieldCheck className="h-5 w-5 text-white" />
 						</div>
 						<div>
@@ -463,7 +463,7 @@ export function Settings({
 									value={exportPw}
 									onChange={(e) => setExportPw(e.target.value)}
 									placeholder="Export password (≥8 chars)"
-									className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 pr-10 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+									className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 pr-10 text-sm text-white placeholder:text-slate-500 focus:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/10"
 								/>
 								<button type="button" onClick={() => setExportShow((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300" aria-label={exportShow ? "Hide password" : "Show password"}>
 									{exportShow ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -474,7 +474,7 @@ export function Settings({
 								value={exportConfirm}
 								onChange={(e) => setExportConfirm(e.target.value)}
 								placeholder="Confirm password"
-								className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+								className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/10"
 							/>
 							{exportError && <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">{exportError}</p>}
 							<div className="flex justify-end gap-2 pt-1">
@@ -490,7 +490,7 @@ export function Settings({
 								<button
 									onClick={() => void handleExportEncrypted()}
 									disabled={exportLoading}
-									className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+									className="rounded-xl bg-white text-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-200 disabled:opacity-50"
 								>
 									{exportLoading ? "Encrypting…" : "Export"}
 								</button>
@@ -513,7 +513,7 @@ export function Settings({
 									value={restorePw}
 									onChange={(e) => setRestorePw(e.target.value)}
 									placeholder="Backup password"
-									className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 pr-10 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+									className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 pr-10 text-sm text-white placeholder:text-slate-500 focus:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/10"
 								/>
 								<button type="button" onClick={() => setRestoreShow((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300" aria-label={restoreShow ? "Hide password" : "Show password"}>
 									{restoreShow ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -534,7 +534,7 @@ export function Settings({
 								<button
 									onClick={() => void handleRestoreEncrypted()}
 									disabled={restoreLoading}
-									className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+									className="rounded-xl bg-white text-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-200 disabled:opacity-50"
 								>
 									{restoreLoading ? "Decrypting…" : "Restore"}
 								</button>

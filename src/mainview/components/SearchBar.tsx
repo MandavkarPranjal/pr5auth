@@ -9,7 +9,7 @@ interface SearchBarProps {
 export function SearchBar({ value, onChange, placeholder = "Search accounts…" }: SearchBarProps) {
 	return (
 		<div className="group relative">
-			<Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500 transition-colors group-focus-within:text-indigo-400" />
+			<Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white transition-colors group-focus-within:text-white" />
 			<input
 				id="account-search"
 				type="text"
@@ -18,12 +18,12 @@ export function SearchBar({ value, onChange, placeholder = "Search accounts…" 
 				placeholder={placeholder}
 				aria-label="Search accounts by issuer or account name"
 				aria-keyshortcuts="Control+K Meta+K"
-				className="w-full rounded-xl border border-white/[0.07] bg-white/[0.03] py-2.5 pl-10 pr-10 text-sm text-slate-200 placeholder:text-slate-600 outline-none backdrop-blur-md transition-all duration-200 focus:border-indigo-500/40 focus:bg-white/[0.05] focus:shadow-[0_0_0_3px] focus:shadow-indigo-500/10"
+				className="w-full rounded-xl border border-white/[0.03] bg-black py-2.5 pl-10 pr-10 text-sm text-white placeholder:text-slate-500 outline-none backdrop-blur-md transition-all duration-200 focus:border-white/30 focus:bg-black focus:shadow-[0_0_0_3px] focus:shadow-white/20"
 			/>
 			{value && (
-				<button
+<button
 					onClick={() => onChange("")}
-					className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-slate-500 transition-colors hover:text-slate-200"
+					className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-white transition-colors hover:text-white"
 					aria-label="Clear search"
 					type="button"
 				>

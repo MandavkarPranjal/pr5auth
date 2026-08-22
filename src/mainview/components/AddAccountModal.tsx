@@ -64,8 +64,8 @@ export function AddAccountModal({ open, initial, onSave, onCancel }: AddAccountM
 			>
 				<div className="mb-6 flex items-start justify-between">
 					<div className="flex items-center gap-3">
-						<div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/15">
-							<KeyRound className="h-5 w-5 text-indigo-400" />
+						<div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10">
+							<KeyRound className="h-5 w-5 text-neutral-300" />
 						</div>
 						<div>
 							<h2 className="text-base font-semibold text-white">Add account</h2>
@@ -94,7 +94,7 @@ export function AddAccountModal({ open, initial, onSave, onCancel }: AddAccountM
 							onChange={(event) => setIssuer(event.target.value)}
 							placeholder="e.g. GitHub"
 							autoFocus
-							className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 outline-none transition-all focus:border-indigo-500/40 focus:shadow-[0_0_0_3px] focus:shadow-indigo-500/10"
+							className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 outline-none transition-all focus:border-white/30 focus:shadow-[0_0_0_3px] focus:shadow-white/10"
 						/>
 					</label>
 
@@ -107,7 +107,7 @@ export function AddAccountModal({ open, initial, onSave, onCancel }: AddAccountM
 							value={accountName}
 							onChange={(event) => setAccountName(event.target.value)}
 							placeholder="e.g. dev@example.com"
-							className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 outline-none transition-all focus:border-indigo-500/40 focus:shadow-[0_0_0_3px] focus:shadow-indigo-500/10"
+							className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 outline-none transition-all focus:border-white/30 focus:shadow-[0_0_0_3px] focus:shadow-white/10"
 						/>
 					</label>
 
@@ -120,7 +120,7 @@ export function AddAccountModal({ open, initial, onSave, onCancel }: AddAccountM
 							value={secret}
 							onChange={(event) => setSecret(event.target.value)}
 							placeholder="Base32 secret, e.g. JBSWY3DPEHPK3PXP"
-							className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-2.5 font-mono text-sm text-slate-200 placeholder:text-slate-600 outline-none transition-all focus:border-indigo-500/40 focus:shadow-[0_0_0_3px] focus:shadow-indigo-500/10"
+							className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-2.5 font-mono text-sm text-slate-200 placeholder:text-slate-600 outline-none transition-all focus:border-white/30 focus:shadow-[0_0_0_3px] focus:shadow-white/10"
 						/>
 					</label>
 
@@ -140,7 +140,7 @@ export function AddAccountModal({ open, initial, onSave, onCancel }: AddAccountM
 						</button>
 						<button
 							type="submit"
-							className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-950/50 transition-all duration-200 hover:bg-indigo-500 hover:shadow-indigo-900/50 active:scale-[0.98]"
+							className="rounded-xl bg-white text-zinc-900 px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-neutral-200  active:scale-[0.98]"
 						>
 							Save account
 						</button>

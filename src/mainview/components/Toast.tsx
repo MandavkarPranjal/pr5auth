@@ -16,18 +16,18 @@ interface ToastProps {
 const STYLES: Record<ToastKind, { icon: typeof Info; ring: string; text: string }> = {
 	success: {
 		icon: CheckCircle2,
-		ring: "border-emerald-500/25 text-emerald-300",
-		text: "text-emerald-100",
+		ring: "border-black/25 text-white",
+		text: "text-white",
 	},
 	error: {
 		icon: XCircle,
-		ring: "border-red-500/25 text-red-300",
-		text: "text-red-100",
+		ring: "border-black/25 text-red-300",
+		text: "text-red-300",
 	},
 	info: {
 		icon: Info,
-		ring: "border-indigo-500/25 text-indigo-300",
-		text: "text-slate-100",
+		ring: "border-black/25 text-white",
+		text: "text-white",
 	},
 };
 
