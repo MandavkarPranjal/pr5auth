@@ -78,6 +78,20 @@ function assertBackupEnvelope(obj: unknown): asserts obj is EncryptedBackupEnvel
 	if (p.t > 10 || p.m > 256 * 1024 || p.p > 4) throw new StorageError("Backup KDF params out of range", "corrupt")
 }
 
+function validateArgon2Params(params: Argon2Params): void {
+	if (typeof params.t !== "number" || typeof params.m !== "number" || typeof params.p !== "number") {
+		throw new StorageError("Backup KDF params must be integers", "corrupt")
+	}
+	if (!Number.isFinite(params.t) || !Number.isFinite(params.m) || !Number.isFinite(params.p)) {
+		throw new StorageError("Backup file has invalid KDF params", "corrupt")
+	}
+	if (!Number.isSafeInteger(params.t) || !Number.isSafeInteger(params.m) || !Number.isSafeInteger(params.p)) {
+		throw new StorageError("Backup KDF params must be integers", "corrupt")
+	}
+	if (params.t < 1 || params.m < 8 * 1024 || params.p < 1) throw new StorageError("Backup KDF params out of range", "corrupt")
+	if (params.t > 10 || params.m > 256 * 1024 || params.p > 4) throw new StorageError("Backup KDF params out of range", "corrupt")
+}
+
 function encryptWithNode(plaintext: string, key: Uint8Array, iv: Uint8Array): { tag: Uint8Array; data: Uint8Array } {
 	const nodeCrypto = getNodeCrypto()!
 	const cipher = (nodeCrypto as unknown as { createCipheriv: (a: string, k: Uint8Array, iv: Uint8Array) => import("node:crypto").CipherGCM }).createCipheriv("aes-256-gcm", key as unknown as Uint8Array, iv as unknown as Uint8Array)
@@ -187,6 +201,7 @@ export function encryptBackup(
 	params: Argon2Params = DEFAULT_ARGON2_PARAMS,
 ): string {
 	if (!password || password.length < 8) throw new StorageError("Export password must be at least 8 characters", "denied")
+	validateArgon2Params(params)
 	const salt = generateSalt()
 	const key = deriveKey(password, salt, params)
 	const iv = generateIv()
@@ -249,6 +264,7 @@ export async function encryptBackupAsync(
 	params: Argon2Params = DEFAULT_ARGON2_PARAMS,
 ): Promise<string> {
 	if (!password || password.length < 8) throw new StorageError("Export password must be at least 8 characters", "denied")
+	validateArgon2Params(params)
 	const salt = generateSalt()
 	const key = await deriveKeyAsync(password, salt, params)
 	const iv = generateIv()

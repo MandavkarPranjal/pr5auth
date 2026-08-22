@@ -32,6 +32,7 @@ export default function App() {
 		addAccount,
 		deleteAccount,
 		importVault,
+		restoreVault,
 		importJson,
 		importAccounts,
 		replaceAll,
@@ -247,60 +248,36 @@ export default function App() {
 	);
 
 	const handleImportVault = useCallback(
-		async (json: string) => {
+		async (json: string): Promise<void> => {
 			try {
 				// Migration-aware import: merge by default, skip duplicates, support multi-format JSON
-				const result = await importJson(json, "merge");
-				if (result.duplicates.length > 0 && result.uniques.length === 0) {
-					notify("info", "All accounts were duplicates — nothing imported");
-				} else if (result.duplicates.length > 0) {
-					notify("success", `Imported ${result.uniques.length} new, skipped ${result.duplicates.length} duplicate${result.duplicates.length === 1 ? "" : "s"}`);
-				} else {
-					notify("success", `Imported ${result.uniques.length} account${result.uniques.length === 1 ? "" : "s"}`);
-				}
+				// Throw on storage/persist failure so caller (Settings) does not show success.
+				// No toast here — caller owns presentation to avoid duplicate toast + inline.
+				await importJson(json, "merge");
+				return;
 			} catch (err: unknown) {
 				const msg = err instanceof Error ? err.message : String(err);
 				const isFormatError = /invalid|unrecognized|no accounts|no valid/i.test(msg);
 				if (!isFormatError) {
-					notify("error", msg || "Import failed — could not save vault");
 					throw err;
 				}
 				// Format-parsing failure — fallback to legacy vault import for backward compatibility
-				try {
-					const count = await importVault(json);
-					notify("success", `Imported ${count} account${count === 1 ? "" : "s"}`);
-				} catch (err2: unknown) {
-					const msg2 = err2 instanceof Error ? err2.message : String(err2);
-					const isFormatError2 = err2 instanceof SyntaxError || /invalid|unrecognized|no accounts|no valid/i.test(msg2);
-					if (!isFormatError2) {
-						notify("error", msg2 || "Import failed — could not save vault");
-					} else {
-						notify("error", "Import failed — invalid vault file");
-					}
-					throw err2;
-				}
+				await importVault(json);
+				return;
 			}
 		},
-		[importJson, importVault, notify],
+		[importJson, importVault],
 	);
 
 	const handleRestoreVault = useCallback(
-		async (json: string) => {
-			try {
-				const count = await importVault(json);
-				notify("success", `Restored ${count} account${count === 1 ? "" : "s"} from backup`);
-			} catch (err: unknown) {
-				const msg = err instanceof Error ? err.message : String(err);
-				const isFormatError = err instanceof SyntaxError || /invalid|unrecognized|no accounts|no valid/i.test(msg);
-				if (!isFormatError) {
-					notify("error", msg || "Restore failed — could not save vault");
-				} else {
-					notify("error", "Restore failed — invalid backup file");
-				}
-				throw err;
-			}
+		async (json: string): Promise<void> => {
+			// Use restore-specific path that permits empty vaults; do not toast here
+			// so Settings (inline) is the single owner of presentation and we avoid
+			// duplicate toast + inline messages. Throw on failure so Settings does not
+			// mark success.
+			await restoreVault(json);
 		},
-		[importVault, notify],
+		[restoreVault],
 	);
 
 	const handleWizardImport = useCallback(
