@@ -273,7 +273,7 @@ export function ImportWizard({ existingAccounts, onImport, onClose }: ImportWiza
 											{otpauthPreview.duplicates > 0 && ` · ${otpauthPreview.duplicates} duplicate${otpauthPreview.duplicates === 1 ? "" : "s"}`}
 										</p>
 										<p className="mt-0.5 text-[11px] text-slate-500">
-											{otpauthPreview.uniques} new · {otpauthPreview.duplicates} already in vault
+											{otpauthPreview.uniques} new · {otpauthPreview.duplicates} duplicate{otpauthPreview.duplicates === 1 ? "" : "s"}
 										</p>
 									</div>
 									{otpauthPreview.errors.length > 0 && (
