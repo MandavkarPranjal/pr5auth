@@ -5,27 +5,29 @@ import type { Account } from "../types/account";
 
 /**
  * Single shared 250 ms ticker for all TOTP cards — avoids N intervals
- * when the vault contains many accounts.
+ * when the vault contains many accounts. The published snapshot only
+ * changes when the integer second rolls over, so cards re-render once
+ * per second instead of on every 250 ms tick.
  */
-let epochSec = Math.floor(Date.now() / 1000);
-let tick = 0;
-let snapshot = { epochSec, tick };
+let snapshot = { epochSec: Math.floor(Date.now() / 1000) };
 const listeners = new Set<() => void>();
 let timer: number | null = null;
 
+function publish(nowMs: number) {
+	const epochSec = Math.floor(nowMs / 1000);
+	if (epochSec === snapshot.epochSec) return;
+	snapshot = { epochSec };
+	for (const l of listeners) l();
+}
+
 function startIfNeeded() {
 	if (timer !== null) return;
-	timer = window.setInterval(() => {
-		epochSec = Math.floor(Date.now() / 1000);
-		snapshot = { epochSec, tick: ++tick };
-		for (const l of listeners) l();
-	}, 250);
+	timer = window.setInterval(() => publish(Date.now()), 250);
 }
 
 function subscribe(cb: () => void) {
 	listeners.add(cb);
-	epochSec = Math.floor(Date.now() / 1000);
-	snapshot = { epochSec, tick: ++tick };
+	publish(Date.now());
 	startIfNeeded();
 	return () => {
 		listeners.delete(cb);
@@ -57,9 +59,7 @@ export function useTotp(account: Account): TotpState {
 	const { epochSec: epoch } = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
 	const refresh = useCallback(() => {
-		epochSec = Math.floor(Date.now() / 1000);
-		snapshot = { epochSec, tick: ++tick };
-		for (const l of listeners) l();
+		publish(Date.now());
 	}, []);
 
 	const code = useMemo(() => {
