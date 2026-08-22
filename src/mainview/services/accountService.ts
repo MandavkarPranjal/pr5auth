@@ -407,6 +407,11 @@ function normalizeDigits(raw: unknown): Digits {
 	return 6;
 }
 
+function normalizePeriod(raw: unknown): number {
+	const n = Number(raw);
+	return Number.isFinite(n) && n >= 5 && n <= 300 ? n : 30;
+}
+
 function tryParseAegis(parsed: unknown): Account[] | null {
 	try {
 		if (typeof parsed !== "object" || parsed === null) return null;
@@ -440,7 +445,7 @@ function tryParseAegis(parsed: unknown): Account[] | null {
 					secret: normalizeSecret(secret),
 					algorithm: normalizeAlgorithm(info.algo ?? info.algorithm),
 					digits: normalizeDigits(info.digits),
-					period: typeof info.period === "number" ? info.period : 30,
+					period: normalizePeriod(info.period),
 				}),
 			);
 		}
