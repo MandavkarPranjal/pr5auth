@@ -61,6 +61,7 @@ export function EmptyState({
 				<div className="mt-5 flex items-center gap-3">
 					{action && (
 						<button
+							type="button"
 							onClick={action.onClick}
 							className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-950/50 transition-all duration-200 hover:bg-indigo-500 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50"
 						>
@@ -70,6 +71,7 @@ export function EmptyState({
 					)}
 					{secondaryAction && (
 						<button
+							type="button"
 							onClick={secondaryAction.onClick}
 							className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50"
 						>

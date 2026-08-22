@@ -18,6 +18,7 @@ export function Dashboard({ accounts, onAdd, onDelete, onCopy }: DashboardProps)
 	const [query, setQuery] = useState("");
 	const debouncedQuery = useDebouncedValue(query, 160);
 	const visible = useMemo(() => findAccounts(accounts, debouncedQuery), [accounts, debouncedQuery]);
+	const hasQuery = debouncedQuery.trim().length > 0;
 
 	return (
 		<div className="flex h-full flex-col">
@@ -57,8 +58,8 @@ export function Dashboard({ accounts, onAdd, onDelete, onCopy }: DashboardProps)
 				</div>
 			) : (
 				<EmptyState
-					variant={query ? "no-results" : "no-accounts"}
-					action={!query ? { label: "Add account", onClick: onAdd, icon: <Plus className="h-4 w-4" aria-hidden="true" /> } : undefined}
+					variant={hasQuery ? "no-results" : "no-accounts"}
+					action={!hasQuery ? { label: "Add account", onClick: onAdd, icon: <Plus className="h-4 w-4" aria-hidden="true" /> } : undefined}
 				/>
 			)}
 		</div>

@@ -1,6 +1,5 @@
-import { ExternalLink, ShieldCheck, Sparkles } from "lucide-react";
-
-const APP_VERSION = "1.0.0";
+import { ShieldCheck, Sparkles } from "lucide-react";
+import { APP_VERSION } from "../constants";
 
 export function About() {
 	return (
@@ -35,7 +34,7 @@ export function About() {
 						{["Encrypted local vault", "QR and URI imports", "Keyboard-friendly controls", "Accessible loading and error states", "Fast account search", "System tray support"].map((item) => <li key={item} className="flex items-center gap-2"><span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />{item}</li>)}
 					</ul>
 				</section>
-				<p className="flex items-center gap-1 text-xs text-slate-600">Built with React, TypeScript and Electrobun <ExternalLink className="h-3 w-3" aria-hidden="true" /></p>
+				<p className="text-xs text-slate-600">Built with React, TypeScript and Electrobun</p>
 			</div>
 		</div>
 	);

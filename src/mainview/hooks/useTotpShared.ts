@@ -8,30 +8,25 @@ import type { Account } from "../types/account";
  * when the vault contains many accounts.
  */
 let epochSec = Math.floor(Date.now() / 1000);
+let tick = 0;
+let snapshot = { epochSec, tick };
 const listeners = new Set<() => void>();
 let timer: number | null = null;
 
 function startIfNeeded() {
 	if (timer !== null) return;
 	timer = window.setInterval(() => {
-		const next = Math.floor(Date.now() / 1000);
-		if (next !== epochSec) {
-			epochSec = next;
-		} else {
-			// Still notify so remaining/progress animates smoothly
-			// but code itself only changes once per `period`.
-			// We still tick every 250 ms for smooth ring animation by
-			// forcing an update even within same second.
-		}
+		epochSec = Math.floor(Date.now() / 1000);
+		snapshot = { epochSec, tick: ++tick };
 		for (const l of listeners) l();
 	}, 250);
-	// Also use a 250ms interval to force re-render for countdown ring smoothness
 }
 
 function subscribe(cb: () => void) {
 	listeners.add(cb);
+	epochSec = Math.floor(Date.now() / 1000);
+	snapshot = { epochSec, tick: ++tick };
 	startIfNeeded();
-	if (listeners.size === 1 && timer === null) startIfNeeded();
 	return () => {
 		listeners.delete(cb);
 		if (listeners.size === 0 && timer !== null) {
@@ -42,7 +37,7 @@ function subscribe(cb: () => void) {
 }
 
 function getSnapshot() {
-	return epochSec;
+	return snapshot;
 }
 
 const guardrails = createGuardrails({ MIN_SECRET_BYTES: 10 });
@@ -59,10 +54,11 @@ export interface TotpState {
 
 /** Optimized TOTP hook that shares a single timer across all cards. */
 export function useTotp(account: Account): TotpState {
-	const epoch = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+	const { epochSec: epoch } = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
 	const refresh = useCallback(() => {
 		epochSec = Math.floor(Date.now() / 1000);
+		snapshot = { epochSec, tick: ++tick };
 		for (const l of listeners) l();
 	}, []);
 

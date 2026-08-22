@@ -54,16 +54,6 @@ export default function App() {
 	const [toasts, setToasts] = useState<ToastItem[]>([]);
 	const [wizardImporting, setWizardImporting] = useState(false);
 
-	useKeyboardShortcuts([
-		{ key: "k", mod: true, handler: () => document.getElementById("account-search")?.focus() },
-		{ key: "n", handler: () => { if (!modalOpen && !locked) { setPage("dashboard"); setModalOpen(true); } } },
-		{ key: "1", handler: () => setPage("dashboard") },
-		{ key: "2", handler: () => setPage("import") },
-		{ key: "3", handler: () => setPage("settings") },
-		{ key: "4", handler: () => setPage("about") },
-		{ key: "Escape", handler: () => { if (modalOpen) { setModalOpen(false); setModalPrefill(undefined); } } },
-	], [modalOpen, locked]);
-
 	const accountsRef = useRef<Account[]>([]);
 	accountsRef.current = accounts;
 	const lockedRef = useRef(locked);
@@ -327,6 +317,26 @@ export default function App() {
 		},
 		[wizardImporting, notify],
 	);
+
+	useKeyboardShortcuts([
+		{
+			key: "k",
+			mod: true,
+			allowInInput: true,
+			enabled: !modalOpen && !locked && !wizardImporting,
+			handler: () => document.getElementById("account-search")?.focus(),
+		},
+		{
+			key: "n",
+			enabled: !modalOpen && !locked && !wizardImporting,
+			handler: () => { setPage("dashboard"); setModalOpen(true); },
+		},
+		{ key: "1", enabled: !modalOpen && !locked, handler: () => handleNavigate("dashboard") },
+		{ key: "2", enabled: !modalOpen && !locked, handler: () => handleNavigate("import") },
+		{ key: "3", enabled: !modalOpen && !locked, handler: () => handleNavigate("settings") },
+		{ key: "4", enabled: !modalOpen && !locked, handler: () => handleNavigate("about") },
+		{ key: "Escape", handler: () => { if (modalOpen) { setModalOpen(false); setModalPrefill(undefined); } } },
+	], [modalOpen, locked, wizardImporting, handleNavigate]);
 
 	// Auto-lock after inactivity when enabled.
 	const lastActivityRef = useRef<number>(Date.now());

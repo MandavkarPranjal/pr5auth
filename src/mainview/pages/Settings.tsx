@@ -7,6 +7,7 @@ import { Toggle } from "../components/Toggle";
 import { exportVault } from "../services/accountService";
 import { changeVaultPassword, lockVault } from "../services/storage";
 import { decryptBackupAsync, encryptBackupAsync, isEncryptedBackup, validateEncryptedBackupStructure } from "../../shared/backupCrypto";
+import { APP_VERSION } from "../constants";
 
 interface SettingsProps {
 	accounts: Account[];
@@ -18,8 +19,6 @@ interface SettingsProps {
 	vaultStatus?: VaultStatus | null;
 	onVaultReload?: () => void;
 }
-
-const APP_VERSION = "1.0.0";
 
 export function Settings({
 	accounts,

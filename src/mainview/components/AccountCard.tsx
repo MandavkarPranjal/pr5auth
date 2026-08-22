@@ -54,17 +54,7 @@ export function AccountCard({ account, onDelete, onCopy }: AccountCardProps) {
 
 	return (
 		<div
-			onClick={handleCopy}
-			role="button"
-			tabIndex={0}
-			aria-label={`Copy current code for ${account.issuer}, ${account.accountName}`}
-			onKeyDown={(event) => {
-				if (event.key === "Enter" || event.key === " ") {
-					event.preventDefault();
-					handleCopy();
-				}
-			}}
-			className="group relative cursor-pointer overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.03] p-5 backdrop-blur-xl transition-all duration-300 hover:-translate-y-0.5 hover:border-indigo-500/30 hover:bg-white/[0.05] hover:shadow-xl hover:shadow-indigo-950/40"
+			className="group relative overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.03] p-5 backdrop-blur-xl transition-all duration-300 hover:-translate-y-0.5 hover:border-indigo-500/30 hover:bg-white/[0.05] hover:shadow-xl hover:shadow-indigo-950/40"
 		>
 			<div
 				className={`pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-indigo-400/40 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100`}
