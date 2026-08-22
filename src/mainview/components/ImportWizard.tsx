@@ -32,6 +32,7 @@ export function ImportWizard({ existingAccounts, onImport, onClose }: ImportWiza
 	const [error, setError] = useState<string | null>(null);
 	const [qrError, setQrError] = useState<string | null>(null);
 	const [qrScanning, setQrScanning] = useState(false);
+	const [importSummary, setImportSummary] = useState<{ totalValid: number; totalUniques: number; totalDuplicates: number; strategy: ImportStrategy } | null>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const qrFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -141,7 +142,12 @@ export function ImportWizard({ existingAccounts, onImport, onClose }: ImportWiza
 				setImporting(false);
 				return;
 			}
+			// Snapshot preview counts before awaiting onImport — after success
+			// existingAccounts updates and would otherwise make the new accounts
+			// appear as duplicates in the confirmation view.
+			const snapshot = { totalValid, totalUniques, totalDuplicates, strategy };
 			await onImport(strategy === "replace" ? candidates : toImport, strategy);
+			setImportSummary(snapshot);
 			setStep("confirm");
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));
@@ -153,6 +159,13 @@ export function ImportWizard({ existingAccounts, onImport, onClose }: ImportWiza
 	const totalValid = activePreview?.valid ?? 0;
 	const totalDuplicates = activePreview?.duplicates ?? 0;
 	const totalUniques = activePreview?.uniques ?? 0;
+
+	// Immutable summary rendered on the confirmation step — snapshotted before
+	// onImport mutates existingAccounts.
+	const confirmValid = importSummary?.totalValid ?? totalValid;
+	const confirmUniques = importSummary?.totalUniques ?? totalUniques;
+	const confirmDuplicates = importSummary?.totalDuplicates ?? totalDuplicates;
+	const confirmStrategy = importSummary?.strategy ?? strategy;
 
 	return (
 		<div className="flex h-full flex-col overflow-y-auto">
@@ -521,16 +534,16 @@ export function ImportWizard({ existingAccounts, onImport, onClose }: ImportWiza
 					</div>
 					<h3 className="mt-4 text-base font-semibold text-emerald-100">Import complete</h3>
 					<p className="mt-1 max-w-sm text-xs leading-relaxed text-emerald-300/70">
-						{strategy === "replace"
-							? `Vault replaced with ${totalValid} account${totalValid === 1 ? "" : "s"}.`
-							: `${totalUniques} new account${totalUniques === 1 ? "" : "s"} added${totalDuplicates > 0 ? `, ${totalDuplicates} duplicate${totalDuplicates === 1 ? "" : "s"} skipped` : ""}.`}
+						{confirmStrategy === "replace"
+							? `Vault replaced with ${confirmValid} account${confirmValid === 1 ? "" : "s"}.`
+							: `${confirmUniques} new account${confirmUniques === 1 ? "" : "s"} added${confirmDuplicates > 0 ? `, ${confirmDuplicates} duplicate${confirmDuplicates === 1 ? "" : "s"} skipped` : ""}.`}
 					</p>
 					{onClose ? (
 						<button onClick={onClose} className="mt-6 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500">
 							Done
 						</button>
 					) : (
-						<button onClick={() => { setStep("source"); setOtpauthInput(""); setJsonText(null); setJsonFileName(null); }} className="mt-6 rounded-xl bg-white/[0.06] px-5 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.08]">
+						<button onClick={() => { setStep("source"); setOtpauthInput(""); setJsonText(null); setJsonFileName(null); setImportSummary(null); }} className="mt-6 rounded-xl bg-white/[0.06] px-5 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.08]">
 							Import more
 						</button>
 					)}
