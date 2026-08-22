@@ -555,7 +555,7 @@ export function parseJsonImport(json: string): JsonImportResult {
 		const obj = parsed as Record<string, unknown>;
 
 		// Check for uris / otpauth arrays
-		for (const key of ["uris", "otpauth", "otpauth_uris", "urls"]) {
+		for (const key of ["uris", "otpauth", "otpauth_uris", "urls", "entries"]) {
 			if (Array.isArray(obj[key])) {
 				const uriAccounts = tryParseOtpauthUriArray(obj[key], warnings);
 				if (uriAccounts) return { accounts: uriAccounts, source: "otpauth-uris", warnings };
