@@ -67,8 +67,15 @@ function assertBackupEnvelope(obj: unknown): asserts obj is EncryptedBackupEnvel
 	if (typeof p.t !== "number" || typeof p.m !== "number" || typeof p.p !== "number") {
 		throw new StorageError("Backup file has invalid KDF params", "corrupt")
 	}
-	// Basic sanity — prevents absurd memory DoS
+	if (!Number.isFinite(p.t) || !Number.isFinite(p.m) || !Number.isFinite(p.p)) {
+		throw new StorageError("Backup file has invalid KDF params", "corrupt")
+	}
+	if (!Number.isSafeInteger(p.t) || !Number.isSafeInteger(p.m) || !Number.isSafeInteger(p.p)) {
+		throw new StorageError("Backup KDF params must be integers", "corrupt")
+	}
+	// Basic sanity — prevents absurd memory DoS / renderer hangs from crafted backups
 	if (p.t < 1 || p.m < 8 * 1024 || p.p < 1) throw new StorageError("Backup KDF params out of range", "corrupt")
+	if (p.t > 10 || p.m > 256 * 1024 || p.p > 4) throw new StorageError("Backup KDF params out of range", "corrupt")
 }
 
 function encryptWithNode(plaintext: string, key: Uint8Array, iv: Uint8Array): { tag: Uint8Array; data: Uint8Array } {
