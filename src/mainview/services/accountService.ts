@@ -60,40 +60,44 @@ export interface ParsedOtpauth {
 }
 
 export function parseOtpauthUri(uri: string): ParsedOtpauth | null {
-	const raw = uri.trim();
-	if (!OTPAUTH_REGEX.test(raw)) return null;
+	try {
+		const raw = uri.trim();
+		if (!OTPAUTH_REGEX.test(raw)) return null;
 
-	const url = new URL(raw);
-	if (url.hostname.toLowerCase() !== "totp") return null;
+		const url = new URL(raw);
+		if (url.hostname.toLowerCase() !== "totp") return null;
 
-	const secret = url.searchParams.get("secret")?.trim() ?? "";
-	if (!isValidSecret(normalizeSecret(secret))) return null;
+		const secret = url.searchParams.get("secret")?.trim() ?? "";
+		if (!isValidSecret(normalizeSecret(secret))) return null;
 
-	const label = decodeURIComponent(url.pathname.replace(/^\//, ""));
+		const label = decodeURIComponent(url.pathname.replace(/^\//, ""));
 
-	let issuer = url.searchParams.get("issuer")?.trim() ?? "";
-	let accountName = label;
+		let issuer = url.searchParams.get("issuer")?.trim() ?? "";
+		let accountName = label;
 
-	if (label.includes(":")) {
-		const colonIndex = label.indexOf(":");
-		issuer = issuer || label.slice(0, colonIndex);
-		accountName = label.slice(colonIndex + 1);
+		if (label.includes(":")) {
+			const colonIndex = label.indexOf(":");
+			issuer = issuer || label.slice(0, colonIndex);
+			accountName = label.slice(colonIndex + 1);
+		}
+
+		const rawAlgorithm = (url.searchParams.get("algorithm") ?? "sha1").toLowerCase();
+		const rawDigits = Number(url.searchParams.get("digits") ?? 6);
+		const rawPeriod = Number(url.searchParams.get("period") ?? 30);
+
+		return {
+			issuer: issuer.trim() || "Unknown",
+			accountName: accountName.trim() || "Account",
+			secret: normalizeSecret(secret),
+			algorithm: ["sha1", "sha256", "sha512"].includes(rawAlgorithm)
+				? (rawAlgorithm as HashAlgorithm)
+				: "sha1",
+			digits: [6, 7, 8].includes(rawDigits) ? (rawDigits as Digits) : 6,
+			period: rawPeriod >= 5 && rawPeriod <= 300 ? rawPeriod : 30,
+		};
+	} catch {
+		return null;
 	}
-
-	const rawAlgorithm = (url.searchParams.get("algorithm") ?? "sha1").toLowerCase();
-	const rawDigits = Number(url.searchParams.get("digits") ?? 6);
-	const rawPeriod = Number(url.searchParams.get("period") ?? 30);
-
-	return {
-		issuer: issuer.trim() || "Unknown",
-		accountName: accountName.trim() || "Account",
-		secret: normalizeSecret(secret),
-		algorithm: ["sha1", "sha256", "sha512"].includes(rawAlgorithm)
-			? (rawAlgorithm as HashAlgorithm)
-			: "sha1",
-		digits: [6, 7, 8].includes(rawDigits) ? (rawDigits as Digits) : 6,
-		period: rawPeriod >= 5 && rawPeriod <= 300 ? rawPeriod : 30,
-	};
 }
 
 export const VAULT_SCHEMA_VERSION = 1
@@ -239,9 +243,13 @@ export function parseOtpauthBatch(input: string): OtpauthBatchResult {
 			// If the whole line is a single URI (or multiple URIs matched), parse each match
 			// Also handle case where line has surrounding text
 			for (const rawUri of matches) {
-				const entry = parseOtpauthUri(rawUri);
-				if (entry) parsed.push(entry);
-				else errors.push({ raw: rawUri, reason: "Invalid otpauth URI or secret" });
+				try {
+					const entry = parseOtpauthUri(rawUri);
+					if (entry) parsed.push(entry);
+					else errors.push({ raw: rawUri, reason: "Invalid otpauth URI or secret" });
+				} catch (err) {
+					errors.push({ raw: rawUri, reason: err instanceof Error ? err.message : "Invalid otpauth URI or secret" });
+				}
 			}
 			// If matches didn't cover entire line and line isn't just URIs, treat remainder as error if no match
 			// (already handled by matches length check)
@@ -250,20 +258,28 @@ export function parseOtpauthBatch(input: string): OtpauthBatchResult {
 			}
 		} else {
 			// No otpauth:// pattern found – try parsing the whole line as a URI
-			const entry = parseOtpauthUri(trimmedLine);
-			if (entry) parsed.push(entry);
-			else {
-				// Also support comma-separated raw strings without newlines
-				const commaParts = trimmedLine.split(",").map((s) => s.trim()).filter(Boolean);
-				if (commaParts.length > 1) {
-					for (const part of commaParts) {
-						const e = parseOtpauthUri(part);
-						if (e) parsed.push(e);
-						else errors.push({ raw: part, reason: "Invalid otpauth URI or secret" });
+			try {
+				const entry = parseOtpauthUri(trimmedLine);
+				if (entry) parsed.push(entry);
+				else {
+					// Also support comma-separated raw strings without newlines
+					const commaParts = trimmedLine.split(",").map((s) => s.trim()).filter(Boolean);
+					if (commaParts.length > 1) {
+						for (const part of commaParts) {
+							try {
+								const e = parseOtpauthUri(part);
+								if (e) parsed.push(e);
+								else errors.push({ raw: part, reason: "Invalid otpauth URI or secret" });
+							} catch (err) {
+								errors.push({ raw: part, reason: err instanceof Error ? err.message : "Invalid otpauth URI or secret" });
+							}
+						}
+					} else {
+						errors.push({ raw: trimmedLine, reason: "Invalid otpauth URI or secret" });
 					}
-				} else {
-					errors.push({ raw: trimmedLine, reason: "Invalid otpauth URI or secret" });
 				}
+			} catch (err) {
+				errors.push({ raw: trimmedLine, reason: err instanceof Error ? err.message : "Invalid otpauth URI or secret" });
 			}
 		}
 	}
