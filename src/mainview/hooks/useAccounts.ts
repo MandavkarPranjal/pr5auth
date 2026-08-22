@@ -166,7 +166,7 @@ export function useAccounts(): UseAccountsResult {
 				const plan = planMigration(accountsRef.current, imported, strategy);
 				const next = applyMigration(accountsRef.current, imported, strategy);
 				await persist(next);
-				return { ...plan, imported: plan.uniques.length };
+				return { ...plan, imported: plan.toImport.length };
 			});
 		},
 		[persist, enqueue],
@@ -184,7 +184,7 @@ export function useAccounts(): UseAccountsResult {
 				const plan = planMigration(accountsRef.current, imported, strategy);
 				const next = applyMigration(accountsRef.current, imported, strategy);
 				await persist(next);
-				return { ...plan, imported: plan.uniques.length };
+				return { ...plan, imported: plan.toImport.length };
 			});
 		},
 		[persist, enqueue],
@@ -197,7 +197,7 @@ export function useAccounts(): UseAccountsResult {
 				const plan = planMigration(accountsRef.current, accountsToImport, strategy);
 				const next = applyMigration(accountsRef.current, accountsToImport, strategy);
 				await persist(next);
-				return { ...plan, imported: plan.uniques.length };
+				return { ...plan, imported: plan.toImport.length };
 			});
 		},
 		[persist, enqueue],

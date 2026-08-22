@@ -732,7 +732,7 @@ export function buildJsonImportPreview(existing: Account[], json: string): Impor
 			duplicateAccounts: [],
 			uniqueAccounts: [],
 			errors: [{ raw: json.slice(0, 200), reason: msg }],
-			source: "otpauth",
+			source: "unknown",
 		};
 	}
 }
