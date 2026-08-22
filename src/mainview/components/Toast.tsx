@@ -31,9 +31,13 @@ const STYLES: Record<ToastKind, { icon: typeof Info; ring: string; text: string 
 	},
 };
 
-export function Toast({ items }: ToastProps) {
+export function Toast({ items, onDismiss }: ToastProps & { onDismiss?: (id: string) => void }) {
 	return (
-		<div className="pointer-events-none fixed bottom-6 left-1/2 z-[60] flex -translate-x-1/2 flex-col items-center gap-2">
+		<div
+			aria-live="polite"
+			aria-atomic="false"
+			className="pointer-events-none fixed bottom-6 left-1/2 z-[60] flex -translate-x-1/2 flex-col items-center gap-2"
+		>
 			{items.map((item) => {
 				const style = STYLES[item.kind];
 				const Icon = style.icon;
@@ -43,8 +47,17 @@ export function Toast({ items }: ToastProps) {
 						className={`animate-toast-in pointer-events-auto flex items-center gap-2.5 rounded-xl border ${style.ring} bg-[#151823]/95 px-4 py-2.5 shadow-xl shadow-black/50 backdrop-blur-xl`}
 						role="status"
 					>
-						<Icon className="h-4 w-4 shrink-0" />
+						<Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
 						<span className={`text-sm font-medium ${style.text}`}>{item.message}</span>
+						{onDismiss && (
+							<button
+								onClick={() => onDismiss(item.id)}
+								aria-label="Dismiss notification"
+								className="ml-1 rounded p-1 opacity-60 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+							>
+								<span aria-hidden="true">×</span>
+							</button>
+						)}
 					</div>
 				);
 			})}

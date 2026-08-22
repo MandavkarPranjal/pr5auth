@@ -1,4 +1,4 @@
-import { LayoutGrid, QrCode, Settings, ShieldCheck } from "lucide-react";
+import { LayoutGrid, QrCode, Settings, ShieldCheck, Info } from "lucide-react";
 import type { Page } from "../types/account";
 
 interface SidebarProps {
@@ -8,10 +8,13 @@ interface SidebarProps {
 	locked: boolean;
 }
 
-const NAV_ITEMS: { page: Page; label: string; icon: typeof LayoutGrid }[] = [
-	{ page: "dashboard", label: "Authenticator", icon: LayoutGrid },
-	{ page: "import", label: "Import QR", icon: QrCode },
-	{ page: "settings", label: "Settings", icon: Settings },
+const APP_VERSION = "1.0.0";
+
+const NAV_ITEMS: { page: Page; label: string; icon: typeof LayoutGrid; shortcut: string }[] = [
+	{ page: "dashboard", label: "Authenticator", icon: LayoutGrid, shortcut: "1" },
+	{ page: "import", label: "Import", icon: QrCode, shortcut: "2" },
+	{ page: "settings", label: "Settings", icon: Settings, shortcut: "3" },
+	{ page: "about", label: "About", icon: Info, shortcut: "4" },
 ];
 
 export function Sidebar({ page, onNavigate, accountCount, locked }: SidebarProps) {
@@ -31,7 +34,7 @@ export function Sidebar({ page, onNavigate, accountCount, locked }: SidebarProps
 				</div>
 			</div>
 
-			<nav className="flex flex-1 flex-col gap-1 px-3">
+			<nav aria-label="Main navigation" className="flex flex-1 flex-col gap-1 px-3">
 				{NAV_ITEMS.map((item) => {
 					const Icon = item.icon;
 					const active = page === item.page;
@@ -39,13 +42,16 @@ export function Sidebar({ page, onNavigate, accountCount, locked }: SidebarProps
 						<button
 							key={item.page}
 							onClick={() => onNavigate(item.page)}
-							className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+							aria-current={active ? "page" : undefined}
+							aria-label={`${item.label} (press ${item.shortcut})`}
+							className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 ${
 								active
 									? "bg-indigo-500/15 text-indigo-300 shadow-inner shadow-indigo-950/40"
 									: "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
 							}`}
 						>
 							<Icon
+								aria-hidden="true"
 								className={`h-[18px] w-[18px] transition-colors ${
 									active
 										? "text-indigo-400"
@@ -81,7 +87,7 @@ export function Sidebar({ page, onNavigate, accountCount, locked }: SidebarProps
 					</span>
 				</div>
 				<p className="px-1 text-[10px] font-medium tracking-wider text-slate-600">
-					PR5AUTH v0.1.0 · LOCAL ONLY
+					PR5AUTH v{APP_VERSION} · LOCAL ONLY
 				</p>
 			</div>
 		</aside>

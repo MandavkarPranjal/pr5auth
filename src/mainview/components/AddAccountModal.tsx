@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { KeyRound, X } from "lucide-react";
 import type { AddAccountInput } from "../types/account";
 import { isValidSecret, normalizeSecret } from "../services/accountService";
@@ -15,6 +15,7 @@ export function AddAccountModal({ open, initial, onSave, onCancel }: AddAccountM
 	const [accountName, setAccountName] = useState("");
 	const [secret, setSecret] = useState("");
 	const [error, setError] = useState<string | null>(null);
+	const dialogRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
 		if (open) {
@@ -24,6 +25,39 @@ export function AddAccountModal({ open, initial, onSave, onCancel }: AddAccountM
 			setError(null);
 		}
 	}, [open, initial]);
+
+	// Focus trap + Escape + focus return
+	useEffect(() => {
+		if (!open) return;
+		const dialog = dialogRef.current;
+		const prevActive = document.activeElement as HTMLElement | null;
+		const focusable = dialog?.querySelectorAll<HTMLElement>(
+			'a[href], button:not([disabled]), textarea, input:not([disabled]), select, [tabindex]:not([tabindex="-1"])',
+		);
+		focusable?.[0]?.focus();
+		function onKeyDown(e: KeyboardEvent) {
+			if (e.key === "Escape") {
+				e.preventDefault();
+				onCancel();
+			}
+			if (e.key === "Tab" && dialog && focusable && focusable.length > 0) {
+				const first = focusable[0];
+				const last = focusable[focusable.length - 1];
+				if (e.shiftKey && document.activeElement === first) {
+					e.preventDefault();
+					last.focus();
+				} else if (!e.shiftKey && document.activeElement === last) {
+					e.preventDefault();
+					first.focus();
+				}
+			}
+		}
+		document.addEventListener("keydown", onKeyDown);
+		return () => {
+			document.removeEventListener("keydown", onKeyDown);
+			prevActive?.focus();
+		};
+	}, [open, onCancel]);
 
 	if (!open) return null;
 
@@ -56,11 +90,12 @@ export function AddAccountModal({ open, initial, onSave, onCancel }: AddAccountM
 			onClick={onCancel}
 		>
 			<div
+				ref={dialogRef}
 				className="animate-modal-in w-full max-w-md rounded-2xl border border-white/[0.08] bg-[#12151F]/95 p-6 shadow-2xl shadow-black/60 backdrop-blur-2xl"
 				onClick={(event) => event.stopPropagation()}
 				role="dialog"
 				aria-modal="true"
-				aria-label="Add account"
+				aria-labelledby="add-account-title"
 			>
 				<div className="mb-6 flex items-start justify-between">
 					<div className="flex items-center gap-3">
@@ -68,7 +103,7 @@ export function AddAccountModal({ open, initial, onSave, onCancel }: AddAccountM
 							<KeyRound className="h-5 w-5 text-indigo-400" />
 						</div>
 						<div>
-							<h2 className="text-base font-semibold text-white">Add account</h2>
+							<h2 id="add-account-title" className="text-base font-semibold text-white">Add account</h2>
 							<p className="text-xs text-slate-500">
 								Store a new TOTP secret locally
 							</p>

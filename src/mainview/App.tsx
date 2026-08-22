@@ -19,6 +19,10 @@ import { LockScreen } from "./components/LockScreen";
 import { Dashboard } from "./pages/Dashboard";
 import { Settings } from "./pages/Settings";
 import { ImportWizard } from "./components/ImportWizard";
+import { About } from "./pages/About";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { SkeletonGrid } from "./components/Skeleton";
+import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import type { ImportStrategy } from "./services/accountService";
 
 const AUTO_LOCK_MS = 5 * 60 * 1000;
@@ -49,6 +53,7 @@ export default function App() {
 	const [vaultLoading, setVaultLoading] = useState(true);
 	const [toasts, setToasts] = useState<ToastItem[]>([]);
 	const [wizardImporting, setWizardImporting] = useState(false);
+	const searchInputRef = useRef<HTMLInputElement>(null);
 
 	const accountsRef = useRef<Account[]>([]);
 	accountsRef.current = accounts;
@@ -69,6 +74,10 @@ export default function App() {
 		}, 2800);
 	}, []);
 
+	const dismissToast = useCallback((id: string) => {
+		setToasts((prev) => prev.filter((t) => t.id !== id));
+	}, []);
+
 	// Initial vault status check – determines initial lock state
 	useEffect(() => {
 		let cancelled = false;
@@ -78,7 +87,6 @@ export default function App() {
 				setVaultStatus(status);
 				if (status) {
 					if (!status.hasPassword) {
-						// No master password yet – require creation
 						setLocked(true);
 					} else if (status.isLocked) {
 						setLocked(true);
@@ -86,13 +94,11 @@ export default function App() {
 						setLocked(false);
 					}
 				} else {
-					// Outside Electrobun (e.g. vite preview) – no vault locking
 					setLocked(false);
 				}
 			})
 			.catch(() => {
 				if (cancelled) return;
-				// Desktop RPC failed – unknown vault state must not fail open
 				setVaultStatus({ hasPassword: true, isLocked: true });
 				setLocked(true);
 			})
@@ -115,12 +121,6 @@ export default function App() {
 				}
 			})
 			.catch((err: unknown) => {
-				// Don't show settings error when vault is locked – settings are encrypted.
-				// Use refs so the async rejection reads the current lock state instead
-				// of the stale `locked` closure from the initial render. On boot a
-				// password-protected vault is already locked, but `locked` is still
-				// false until the vault-status effect resolves, so the closure check
-				// would spuriously toast "Vault is locked...".
 				const msg = err instanceof Error ? err.message : String(err);
 				if (/locked|denied/i.test(msg) && (lockedRef.current || vaultLoadingRef.current)) return;
 				if (!cancelled) {
@@ -133,14 +133,8 @@ export default function App() {
 		return () => {
 			cancelled = true;
 		};
-		// Reload settings when vault is unlocked
 	}, [notify, locked, reload]);
 
-	// Sync account count to tray tooltip - publish only after hydration succeeds
-	// to avoid overwriting the persisted tray count from the main process with 0
-	// during startup, and preserve main-process count when loading fails.
-	// Note: error intentionally omitted from deps so dismissing the storage-error
-	// banner (clearError) does not republish 0 and clobber the preserved count.
 	useEffect(() => {
 		if (loading) return;
 		if (error) return;
@@ -148,19 +142,13 @@ export default function App() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [accounts.length, loading]);
 
-	// Listen for tray Lock Vault action
 	useEffect(() => {
 		const handler = () => {
-			// Backend already locked via RPC, just reflect in UI
 			void getVaultStatus()
 				.then((s) => {
 					if (s) setVaultStatus(s);
 				})
-				.catch(() => {
-					// Vault status unavailable or metadata corrupt – keep
-					// the already-applied locked UI state and avoid an
-					// unhandled promise rejection.
-				});
+				.catch(() => {});
 			setLocked(true);
 		};
 		window.addEventListener("pr5auth:lock", handler);
@@ -223,8 +211,22 @@ export default function App() {
 
 	const handleCopy = useCallback(
 		(account: Account, code: string) => {
-			void navigator.clipboard.writeText(code).catch(() => undefined);
-			notify("success", `${account.issuer} code copied`);
+			const doCopy = async () => {
+				try {
+					await navigator.clipboard.writeText(code);
+					notify("success", `${account.issuer} code copied — clears in 30s`);
+					// Auto-clear clipboard after 30s for security (only if still same value)
+					window.setTimeout(async () => {
+						try {
+							const current = await navigator.clipboard.readText().catch(() => "");
+							if (current === code) await navigator.clipboard.writeText("").catch(() => {});
+						} catch {}
+					}, 30_000);
+				} catch {
+					notify("error", "Failed to copy to clipboard");
+				}
+			};
+			void doCopy();
 		},
 		[notify],
 	);
@@ -249,7 +251,6 @@ export default function App() {
 	const handleImportVault = useCallback(
 		async (json: string) => {
 			try {
-				// Migration-aware import: merge by default, skip duplicates, support multi-format JSON
 				const result = await importJson(json, "merge");
 				if (result.duplicates.length > 0 && result.uniques.length === 0) {
 					notify("info", "All accounts were duplicates — nothing imported");
@@ -265,7 +266,6 @@ export default function App() {
 					notify("error", msg || "Import failed — could not save vault");
 					return;
 				}
-				// Format-parsing failure — fallback to legacy vault import for backward compatibility
 				try {
 					const count = await importVault(json);
 					notify("success", `Imported ${count} account${count === 1 ? "" : "s"}`);
@@ -318,6 +318,27 @@ export default function App() {
 		[wizardImporting, notify],
 	);
 
+	// Keyboard shortcuts
+	useKeyboardShortcuts({
+		onFocusSearch: () => {
+			if (page !== "dashboard") setPage("dashboard");
+			// focus after page switch
+			window.setTimeout(() => searchInputRef.current?.focus(), 50);
+		},
+		onAddAccount: () => {
+			if (wizardImporting) return;
+			setModalPrefill(undefined);
+			setModalOpen(true);
+		},
+		onCloseModal: () => {
+			if (modalOpen) {
+				setModalOpen(false);
+				setModalPrefill(undefined);
+			}
+		},
+		onNavigate: (p) => handleNavigate(p as Page),
+	});
+
 	// Auto-lock after inactivity when enabled.
 	const lastActivityRef = useRef<number>(Date.now());
 	const autoLockInFlightRef = useRef(false);
@@ -351,9 +372,6 @@ export default function App() {
 					setLocked(true);
 				})
 				.catch(() => {
-					// Throttle retries: repeated lock failures are serialized
-					// with storage writes in the backend queue, so retrying
-					// every second can starve normal operations.
 					autoLockRetryAfterRef.current = Date.now() + 30_000;
 				})
 				.finally(() => {
@@ -397,132 +415,136 @@ export default function App() {
 		refreshVaultStatus();
 	}, [reload, refreshVaultStatus]);
 
-	// Don't show storage error banner when vault is locked – it's expected
 	const showError = error && !locked && !vaultLoading;
 
 	return (
-		<div className="flex h-screen w-screen overflow-hidden bg-[#0A0D14] text-slate-200 selection:bg-indigo-500/30">
-			{/* ambient background glow */}
-			<div className="pointer-events-none fixed inset-0 overflow-hidden">
-				<div className="absolute -top-40 left-1/4 h-96 w-96 rounded-full bg-indigo-600/[0.09] blur-[120px]" />
-				<div className="absolute -bottom-48 right-1/5 h-96 w-96 rounded-full bg-violet-600/[0.07] blur-[120px]" />
-			</div>
-
-			<Sidebar
-				page={page}
-				onNavigate={handleNavigate}
-				accountCount={accounts.length}
-				locked={locked}
-			/>
-
-			<main className="relative z-10 flex-1 overflow-hidden">
-				<div className="h-full overflow-y-auto p-8">
-					{showError && (
-						<div className="mb-4 flex items-start justify-between gap-4 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
-							<div>
-								<p className="text-sm font-semibold text-red-200">
-									Storage error
-								</p>
-								<p className="mt-1 text-xs leading-relaxed text-red-300/80">
-									{error}
-								</p>
-							</div>
-							<div className="flex shrink-0 items-center gap-2">
-								<button
-									disabled={wizardImporting}
-									onClick={() => {
-										if (wizardImporting) {
-											notify("info", "Import in progress — please wait");
-											return;
-										}
-										void resetVault().catch((err: unknown) =>
-											notify(
-												"error",
-												err instanceof Error
-													? err.message
-													: "Reset failed",
-											),
-										);
-									}}
-									className="rounded-lg border border-red-400/30 px-3 py-1.5 text-xs font-medium text-red-200 hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-50"
-								>
-									Reset vault
-								</button>
-								<button
-									onClick={clearError}
-									className="rounded-lg p-1 text-red-300/70 hover:text-red-200"
-									aria-label="Dismiss"
-								>
-									✕
-								</button>
-							</div>
-						</div>
-					)}
-					{vaultLoading ? (
-						<div className="flex h-full items-center justify-center">
-							<div className="h-8 w-8 animate-spin rounded-full border-2 border-white/[0.08] border-t-indigo-500" />
-						</div>
-					) : loading ? (
-						<div className="flex h-full items-center justify-center">
-							<div className="h-8 w-8 animate-spin rounded-full border-2 border-white/[0.08] border-t-indigo-500" />
-						</div>
-					) : (
-						<>
-							{page === "dashboard" && (
-								<Dashboard
-									accounts={accounts}
-									onAdd={() => {
-										if (wizardImporting) {
-											notify("info", "Import in progress — please wait");
-											return;
-										}
-										setModalPrefill(undefined);
-										setModalOpen(true);
-									}}
-									onDelete={handleDelete}
-									onCopy={handleCopy}
-								/>
-							)}
-							{page === "import" && (
-								<ImportWizard
-									existingAccounts={accounts}
-									onImport={handleWizardImport}
-								/>
-							)}
-							{page === "settings" && (
-								<Settings
-									accounts={accounts}
-									settings={settings}
-									onSettingsChange={handleSettingsChange}
-									onImportVault={handleImportVault}
-									storageStatus={storageStatus}
-									vaultStatus={vaultStatus}
-									onVaultReload={handleVaultReload}
-								/>
-							)}
-						</>
-					)}
+		<ErrorBoundary>
+			<div className="flex h-screen w-screen overflow-hidden bg-[#0A0D14] text-slate-200 selection:bg-indigo-500/30">
+				<a
+					href="#main-content"
+					className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-indigo-600 focus:px-4 focus:py-2 focus:text-white"
+				>
+					Skip to content
+				</a>
+				<div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
+					<div className="absolute -top-40 left-1/4 h-96 w-96 rounded-full bg-indigo-600/[0.09] blur-[120px]" />
+					<div className="absolute -bottom-48 right-1/5 h-96 w-96 rounded-full bg-violet-600/[0.07] blur-[120px]" />
 				</div>
-			</main>
 
-			<AddAccountModal
-				open={modalOpen}
-				initial={modalPrefill}
-				onSave={handleSaveAccount}
-				onCancel={() => {
-					setModalOpen(false);
-					setModalPrefill(undefined);
-				}}
-			/>
-
-			<Toast items={toasts} />
-			{locked && (
-				<LockScreen
-					mode={vaultStatus && !vaultStatus.hasPassword ? "create" : "unlock"}
-					onUnlock={handleUnlock}
-					onCreate={handleCreate}
+				<Sidebar
+					page={page}
+					onNavigate={handleNavigate}
+					accountCount={accounts.length}
+					locked={locked}
 				/>
-			)}
-		</div>
+
+				<main id="main-content" tabIndex={-1} className="relative z-10 flex-1 overflow-hidden focus:outline-none">
+					<div className="h-full overflow-y-auto p-8">
+						{showError && (
+							<div role="alert" className="mb-4 flex items-start justify-between gap-4 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
+								<div>
+									<p className="text-sm font-semibold text-red-200">Storage error</p>
+									<p className="mt-1 text-xs leading-relaxed text-red-300/80">{error}</p>
+								</div>
+								<div className="flex shrink-0 items-center gap-2">
+									<button
+										type="button"
+										disabled={wizardImporting}
+										onClick={() => {
+											if (wizardImporting) {
+												notify("info", "Import in progress — please wait");
+												return;
+											}
+											void resetVault().catch((err: unknown) =>
+												notify(
+													"error",
+													err instanceof Error ? err.message : "Reset failed",
+												),
+											);
+										}}
+										className="rounded-lg border border-red-400/30 px-3 py-1.5 text-xs font-medium text-red-200 hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40"
+									>
+										Reset vault
+									</button>
+									<button
+										type="button"
+										onClick={clearError}
+										className="rounded-lg p-1 text-red-300/70 hover:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40"
+										aria-label="Dismiss"
+									>
+										✕
+									</button>
+								</div>
+							</div>
+						)}
+						{vaultLoading || loading ? (
+							<div className="space-y-6">
+								<div className="flex items-center gap-2 text-xs text-slate-500" aria-live="polite">
+									<div className="h-4 w-4 animate-spin rounded-full border-2 border-white/[0.08] border-t-indigo-500" aria-hidden="true" />
+									Loading vault…
+								</div>
+								<SkeletonGrid count={6} />
+							</div>
+						) : (
+							<ErrorBoundary>
+								{page === "dashboard" && (
+									<Dashboard
+										accounts={accounts}
+										onAdd={() => {
+											if (wizardImporting) {
+												notify("info", "Import in progress — please wait");
+												return;
+											}
+											setModalPrefill(undefined);
+											setModalOpen(true);
+										}}
+										onDelete={handleDelete}
+										onCopy={handleCopy}
+										searchInputRef={searchInputRef}
+									/>
+								)}
+								{page === "import" && (
+									<ImportWizard
+										existingAccounts={accounts}
+										onImport={handleWizardImport}
+									/>
+								)}
+								{page === "settings" && (
+									<Settings
+										accounts={accounts}
+										settings={settings}
+										onSettingsChange={handleSettingsChange}
+										onImportVault={handleImportVault}
+										storageStatus={storageStatus}
+										vaultStatus={vaultStatus}
+										onVaultReload={handleVaultReload}
+									/>
+								)}
+								{page === "about" && <About />}
+							</ErrorBoundary>
+						)}
+					</div>
+				</main>
+
+				<AddAccountModal
+					open={modalOpen}
+					initial={modalPrefill}
+					onSave={handleSaveAccount}
+					onCancel={() => {
+						setModalOpen(false);
+						setModalPrefill(undefined);
+					}}
+				/>
+
+				<Toast items={toasts} onDismiss={dismissToast} />
+				{locked && (
+					<LockScreen
+						mode={vaultStatus && !vaultStatus.hasPassword ? "create" : "unlock"}
+						onUnlock={handleUnlock}
+						onCreate={handleCreate}
+					/>
+				)}
+			</div>
+		</ErrorBoundary>
 	);
 }

@@ -25,8 +25,23 @@ export function useTotp(account: Account): TotpState {
 	const [epoch, setEpoch] = useState<number>(() => Math.floor(Date.now() / 1000));
 
 	useEffect(() => {
-		const id = window.setInterval(() => setEpoch(Math.floor(Date.now() / 1000)), 250);
-		return () => window.clearInterval(id);
+		let id: number | undefined;
+		function tick() {
+			if (document.visibilityState === "hidden") return;
+			setEpoch(Math.floor(Date.now() / 1000));
+		}
+		function start() {
+			id = window.setInterval(tick, 1000);
+		}
+		function handleVisibility() {
+			if (document.visibilityState === "visible") tick();
+		}
+		start();
+		document.addEventListener("visibilitychange", handleVisibility);
+		return () => {
+			if (id) window.clearInterval(id);
+			document.removeEventListener("visibilitychange", handleVisibility);
+		};
 	}, []);
 
 	const code = useMemo(() => {
