@@ -3,3 +3,10 @@ build/
 dist/
 artifacts/
 *.tsbuildinfo
+*.key
+*.pfx
+*.crt
+*.cer
+*.base64
+*.b64
+.windows-signing/

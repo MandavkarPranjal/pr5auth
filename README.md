@@ -11,6 +11,12 @@ bun run start
 
 Run the checks with `bun test` and `bunx tsc --noEmit`.
 
+## Publishing a release
+
+Create and push a semantic-version tag, for example `v1.0.0`. GitHub Actions builds native packages for Linux, macOS, and Windows, then attaches the artifacts to the generated GitHub Release.
+
+For Windows self-signed certificate setup and rotation, see [docs/windows-signing.md](docs/windows-signing.md).
+
 ## Keyboard shortcuts
 
 - `Ctrl/Cmd + K` focuses account search

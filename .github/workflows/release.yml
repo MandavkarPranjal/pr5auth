@@ -1,0 +1,156 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Validate source
+        run: bun run check
+      - name: Build release package
+        run: bun run build:release
+      - name: Sign Windows release artifact
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE)) {
+            throw 'WINDOWS_CERTIFICATE repository secret is not configured.'
+          }
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PASSWORD)) {
+            throw 'WINDOWS_CERTIFICATE_PASSWORD repository secret is not configured.'
+          }
+
+          $tempRoot = Join-Path $env:RUNNER_TEMP 'pr5auth-signing'
+          $pfxPath = Join-Path $tempRoot 'signing.pfx'
+          $certPath = Join-Path $tempRoot 'signing.cer'
+          $unpackedPath = Join-Path $tempRoot 'artifact'
+          $certificate = $null
+          $thumbprint = $null
+
+          try {
+            New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
+            $pfxBytes = [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE)
+            [IO.File]::WriteAllBytes($pfxPath, $pfxBytes)
+
+            $securePassword = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+            $imported = Import-PfxCertificate `
+              -FilePath $pfxPath `
+              -CertStoreLocation 'Cert:\CurrentUser\My' `
+              -Password $securePassword
+            $certificate = @($imported)[0]
+            if ($null -eq $certificate) {
+              throw 'The signing certificate could not be imported.'
+            }
+            $thumbprint = $certificate.Thumbprint
+
+            # Trust this self-signed certificate only for verification on this runner.
+            Export-Certificate -Cert $certificate -FilePath $certPath -Type CERT | Out-Null
+            Import-Certificate -FilePath $certPath -CertStoreLocation 'Cert:\CurrentUser\Root' | Out-Null
+
+            $signtool = Get-ChildItem `
+              -Path (Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin') `
+              -Filter 'signtool.exe' -Recurse -File -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
+              Sort-Object FullName -Descending |
+              Select-Object -First 1
+            if ($null -eq $signtool) {
+              throw 'signtool.exe was not found on the GitHub-hosted runner.'
+            }
+
+            $zips = @(Get-ChildItem -Path (Join-Path $env:GITHUB_WORKSPACE 'artifacts') -Filter '*.zip' -File)
+            if ($zips.Count -ne 1) {
+              throw "Expected exactly one Electrobun Windows ZIP artifact in artifacts/, found $($zips.Count)."
+            }
+            $zip = $zips[0]
+
+            Expand-Archive -LiteralPath $zip.FullName -DestinationPath $unpackedPath -Force
+            $executables = @(Get-ChildItem -Path $unpackedPath -Filter '*.exe' -Recurse -File)
+            if ($executables.Count -eq 0) {
+              throw 'The Windows artifact ZIP does not contain an executable to sign.'
+            }
+
+            foreach ($executable in $executables) {
+              & $signtool.FullName sign /sha1 $thumbprint /fd SHA256 /tr 'http://timestamp.digicert.com' /td SHA256 $executable.FullName
+              if ($LASTEXITCODE -ne 0) {
+                throw "signtool failed to sign $($executable.Name)."
+              }
+
+              & $signtool.FullName verify /pa /all $executable.FullName
+              if ($LASTEXITCODE -ne 0) {
+                throw "signtool failed to verify $($executable.Name)."
+              }
+            }
+
+            Remove-Item -LiteralPath $zip.FullName -Force
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            [System.IO.Compression.ZipFile]::CreateFromDirectory(
+              $unpackedPath,
+              $zip.FullName,
+              [System.IO.Compression.CompressionLevel]::Optimal,
+              $false
+            )
+          }
+          finally {
+            if ($thumbprint) {
+              Remove-Item -Path "Cert:\CurrentUser\My\$thumbprint" -Force -ErrorAction SilentlyContinue
+              Remove-Item -Path "Cert:\CurrentUser\Root\$thumbprint" -Force -ErrorAction SilentlyContinue
+            }
+            if (Test-Path -LiteralPath $tempRoot) {
+              Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+            }
+          }
+      - name: Upload platform artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr5auth-${{ matrix.os }}
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          pattern: pr5auth-*
+          merge-multiple: true
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          prerelease: false
+          files: release-artifacts/**

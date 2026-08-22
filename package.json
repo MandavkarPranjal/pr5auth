@@ -8,6 +8,9 @@
 		"dev": "electrobun dev --watch",
 		"dev:hmr": "concurrently \"bun run hmr\" \"bun run start\"",
 		"hmr": "vite --port 5173",
+		"typecheck": "tsc --noEmit",
+		"check": "bun run typecheck && bun test",
+		"build:release": "vite build && electrobun build --env=stable",
 		"build:canary": "vite build && electrobun build --env=canary",
 		"test": "bun test"
 	},
