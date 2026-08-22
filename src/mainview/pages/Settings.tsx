@@ -1,11 +1,12 @@
 import { useRef, useState } from "react";
-import { Download, Fingerprint, Info, KeyRound, Lock, ShieldCheck, Upload } from "lucide-react";
+import { Download, Eye, EyeOff, Fingerprint, Info, KeyRound, Lock, ShieldCheck, Upload } from "lucide-react";
 import type { Account, AppSettings } from "../types/account";
 import type { StorageStatus } from "../../shared/storageProvider";
 import type { VaultStatus } from "../../shared/rpcSchema";
 import { Toggle } from "../components/Toggle";
-import { downloadVaultFile } from "../services/accountService";
+import { exportVault } from "../services/accountService";
 import { changeVaultPassword, lockVault } from "../services/storage";
+import { decryptBackupAsync, encryptBackupAsync, isEncryptedBackup } from "../../shared/backupCrypto";
 
 interface SettingsProps {
 	accounts: Account[];
@@ -36,6 +37,22 @@ export function Settings({
 	const [vaultError, setVaultError] = useState<string | null>(null);
 	const [vaultLoading, setVaultLoading] = useState(false);
 
+	// Encrypted backup & restore state
+	const [backupMsg, setBackupMsg] = useState<string | null>(null);
+	const [backupError, setBackupError] = useState<string | null>(null);
+	const [showExportModal, setShowExportModal] = useState(false);
+	const [exportPw, setExportPw] = useState("");
+	const [exportConfirm, setExportConfirm] = useState("");
+	const [exportShow, setExportShow] = useState(false);
+	const [exportError, setExportError] = useState<string | null>(null);
+	const [exportLoading, setExportLoading] = useState(false);
+	const [showRestoreModal, setShowRestoreModal] = useState(false);
+	const [restorePw, setRestorePw] = useState("");
+	const [restoreShow, setRestoreShow] = useState(false);
+	const [restoreError, setRestoreError] = useState<string | null>(null);
+	const [restoreLoading, setRestoreLoading] = useState(false);
+	const [pendingBackupPayload, setPendingBackupPayload] = useState<string | null>(null);
+
 	const storageAvailable = storageStatus?.available ?? false;
 	const storageKind = storageStatus?.kind ?? "unknown";
 	const storageLabel = !storageAvailable
@@ -49,12 +66,107 @@ export function Settings({
 		storageStatus?.detail ??
 		(storageAvailable ? "Secure storage active" : vaultStatus?.isLocked ? "Vault locked — unlock to access" : "Secure storage unavailable");
 
+	async function handleExportEncrypted() {
+		setExportError(null);
+		if (!exportPw || exportPw.length < 8) {
+			setExportError("Export password must be at least 8 characters.");
+			return;
+		}
+		if (exportPw !== exportConfirm) {
+			setExportError("Passwords do not match.");
+			return;
+		}
+		setExportLoading(true);
+		try {
+			const vaultJson = exportVault(accounts);
+			const encrypted = await encryptBackupAsync(vaultJson, exportPw);
+			const blob = new Blob([encrypted], { type: "application/json" });
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			const date = new Date().toISOString().slice(0, 10);
+			a.href = url;
+			a.download = `pr5auth-backup-${date}.enc.json`;
+			a.click();
+			URL.revokeObjectURL(url);
+			setBackupError(null);
+			setBackupMsg("Encrypted backup exported successfully.");
+			setShowExportModal(false);
+			setExportPw("");
+			setExportConfirm("");
+		} catch (err) {
+			setExportError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setExportLoading(false);
+		}
+	}
+
+	async function handleRestoreEncrypted() {
+		if (!pendingBackupPayload) return;
+		setRestoreError(null);
+		if (!restorePw) {
+			setRestoreError("Enter backup password.");
+			return;
+		}
+		setRestoreLoading(true);
+		try {
+			// Validate file integrity and decrypt (AES-256-GCM tag validation)
+			const decrypted = await decryptBackupAsync(pendingBackupPayload, restorePw);
+			// Validate inner vault structure via onImportVault (will throw on malformed)
+			await onImportVault(decrypted);
+			setBackupError(null);
+			setBackupMsg("Backup restored successfully.");
+			setShowRestoreModal(false);
+			setPendingBackupPayload(null);
+			setRestorePw("");
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			// Differentiate integrity vs wrong password vs corrupt
+			if (/wrong password|corrupted|tampered|unrecoverable/i.test(msg)) {
+				setRestoreError("Invalid password or corrupted backup file.");
+			} else if (/corrupt|invalid|unsupported/i.test(msg)) {
+				setRestoreError("Invalid backup file — integrity check failed.");
+			} else {
+				setRestoreError(msg);
+			}
+		} finally {
+			setRestoreLoading(false);
+		}
+	}
+
 	function handleImportFile(file: File | undefined | null) {
 		if (!file) return;
+		setBackupMsg(null);
+		setBackupError(null);
 		file
 			.text()
-			.then(onImportVault)
-			.catch(() => undefined);
+			.then(async (text) => {
+				// Detect encrypted backup file (AES-256-GCM envelope)
+				if (isEncryptedBackup(text)) {
+					// Validate structure before prompting for password
+					try {
+						// lightweight structure check; actual integrity validated on decrypt
+						JSON.parse(text);
+					} catch {
+						setBackupError("Invalid backup file — integrity check failed.");
+						return;
+					}
+					setPendingBackupPayload(text);
+					setRestorePw("");
+					setRestoreError(null);
+					setShowRestoreModal(true);
+					return;
+				}
+				// Plain JSON vault fallback
+				try {
+					await onImportVault(text);
+					setBackupMsg("Vault imported successfully.");
+				} catch (err) {
+					setBackupError(err instanceof Error ? err.message : "Import failed — invalid vault file");
+				}
+			})
+			.catch(() => {
+				setBackupError("Failed to read file.");
+			});
 	}
 
 	async function handleChangePassword(e: React.FormEvent) {
@@ -255,12 +367,17 @@ export function Settings({
 					<div className="border-b border-white/[0.06] px-5 py-4">
 						<h3 className="flex items-center gap-2 text-sm font-semibold text-slate-200">
 							<ShieldCheck className="h-4 w-4 text-indigo-400" />
-							Vault data
+							Backup & restore
 						</h3>
 					</div>
 					<div className="grid grid-cols-2 gap-4 p-5">
 						<button
-							onClick={() => downloadVaultFile(accounts)}
+							onClick={() => {
+								setExportError(null);
+								setExportPw("");
+								setExportConfirm("");
+								setShowExportModal(true);
+							}}
 							className="flex flex-col items-start gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] p-4 text-left transition-all duration-200 hover:border-indigo-500/30 hover:bg-white/[0.05]"
 						>
 							<Download className="h-5 w-5 text-slate-400" />
@@ -268,7 +385,7 @@ export function Settings({
 								Export vault
 							</span>
 							<span className="text-xs leading-relaxed text-slate-500">
-								Download a JSON backup of all your accounts.
+								Export vault to encrypted file (AES-256-GCM).
 							</span>
 						</button>
 
@@ -278,16 +395,16 @@ export function Settings({
 						>
 							<Upload className="h-5 w-5 text-slate-400" />
 							<span className="text-sm font-medium text-slate-200">
-								Import vault
+								Restore backup
 							</span>
 							<span className="text-xs leading-relaxed text-slate-500">
-								Restore accounts from a PR5Auth JSON backup.
+								Restore from encrypted backup. Integrity verified.
 							</span>
 						</button>
 						<input
 							ref={fileInputRef}
 							type="file"
-							accept="application/json,.json"
+							accept="application/json,.json,.enc.json"
 							className="hidden"
 							onChange={(event) => {
 								void handleImportFile(event.target.files?.[0]);
@@ -295,6 +412,12 @@ export function Settings({
 							}}
 						/>
 					</div>
+					{(backupMsg || backupError) && (
+						<div className="px-5 pb-5">
+							{backupMsg && <p className="text-xs text-emerald-300">{backupMsg}</p>}
+							{backupError && <p className="text-xs text-red-300">{backupError}</p>}
+						</div>
+					)}
 				</section>
 
 				<section className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5 backdrop-blur-xl">
@@ -325,6 +448,100 @@ export function Settings({
 					</div>
 				</section>
 			</div>
+
+			{/* Export password modal — prompt for export password */}
+			{showExportModal && (
+				<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
+					<div className="w-full max-w-sm rounded-2xl border border-white/[0.08] bg-[#12151F] p-6 shadow-2xl">
+						<h3 className="text-sm font-semibold text-white">Export encrypted backup</h3>
+						<p className="mt-1 text-xs leading-relaxed text-slate-500">Enter a password to encrypt your vault. Uses AES-256-GCM with Argon2id.</p>
+						<div className="mt-4 space-y-3">
+							<div className="relative">
+								<input
+									type={exportShow ? "text" : "password"}
+									value={exportPw}
+									onChange={(e) => setExportPw(e.target.value)}
+									placeholder="Export password (≥8 chars)"
+									className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 pr-10 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+								/>
+								<button type="button" onClick={() => setExportShow((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+									{exportShow ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+								</button>
+							</div>
+							<input
+								type={exportShow ? "text" : "password"}
+								value={exportConfirm}
+								onChange={(e) => setExportConfirm(e.target.value)}
+								placeholder="Confirm password"
+								className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+							/>
+							{exportError && <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">{exportError}</p>}
+							<div className="flex justify-end gap-2 pt-1">
+								<button
+									onClick={() => {
+										setShowExportModal(false);
+										setExportError(null);
+									}}
+									className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/[0.06]"
+								>
+									Cancel
+								</button>
+								<button
+									onClick={() => void handleExportEncrypted()}
+									disabled={exportLoading}
+									className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+								>
+									{exportLoading ? "Encrypting…" : "Export"}
+								</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* Restore password modal — prompt for restore password and validate integrity */}
+			{showRestoreModal && (
+				<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
+					<div className="w-full max-w-sm rounded-2xl border border-white/[0.08] bg-[#12151F] p-6 shadow-2xl">
+						<h3 className="text-sm font-semibold text-white">Restore encrypted backup</h3>
+						<p className="mt-1 text-xs leading-relaxed text-slate-500">Enter the backup password to decrypt. File integrity will be validated (AES-256-GCM auth tag).</p>
+						<div className="mt-4 space-y-3">
+							<div className="relative">
+								<input
+									type={restoreShow ? "text" : "password"}
+									value={restorePw}
+									onChange={(e) => setRestorePw(e.target.value)}
+									placeholder="Backup password"
+									className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 pr-10 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+								/>
+								<button type="button" onClick={() => setRestoreShow((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+									{restoreShow ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+								</button>
+							</div>
+							{restoreError && <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">{restoreError}</p>}
+							<div className="flex justify-end gap-2 pt-1">
+								<button
+									onClick={() => {
+										setShowRestoreModal(false);
+										setRestoreError(null);
+										setPendingBackupPayload(null);
+									}}
+									className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/[0.06]"
+								>
+									Cancel
+								</button>
+								<button
+									onClick={() => void handleRestoreEncrypted()}
+									disabled={restoreLoading}
+									className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+								>
+									{restoreLoading ? "Decrypting…" : "Restore"}
+								</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			)}
 		</div>
 	);
 }
