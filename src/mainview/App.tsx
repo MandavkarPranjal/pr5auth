@@ -263,7 +263,7 @@ export default function App() {
 				const isFormatError = /invalid|unrecognized|no accounts|no valid/i.test(msg);
 				if (!isFormatError) {
 					notify("error", msg || "Import failed — could not save vault");
-					return;
+					throw err;
 				}
 				// Format-parsing failure — fallback to legacy vault import for backward compatibility
 				try {
@@ -277,10 +277,30 @@ export default function App() {
 					} else {
 						notify("error", "Import failed — invalid vault file");
 					}
+					throw err2;
 				}
 			}
 		},
 		[importJson, importVault, notify],
+	);
+
+	const handleRestoreVault = useCallback(
+		async (json: string) => {
+			try {
+				const count = await importVault(json);
+				notify("success", `Restored ${count} account${count === 1 ? "" : "s"} from backup`);
+			} catch (err: unknown) {
+				const msg = err instanceof Error ? err.message : String(err);
+				const isFormatError = err instanceof SyntaxError || /invalid|unrecognized|no accounts|no valid/i.test(msg);
+				if (!isFormatError) {
+					notify("error", msg || "Restore failed — could not save vault");
+				} else {
+					notify("error", "Restore failed — invalid backup file");
+				}
+				throw err;
+			}
+		},
+		[importVault, notify],
 	);
 
 	const handleWizardImport = useCallback(
@@ -495,6 +515,7 @@ export default function App() {
 									settings={settings}
 									onSettingsChange={handleSettingsChange}
 									onImportVault={handleImportVault}
+									onRestoreVault={handleRestoreVault}
 									storageStatus={storageStatus}
 									vaultStatus={vaultStatus}
 									onVaultReload={handleVaultReload}
