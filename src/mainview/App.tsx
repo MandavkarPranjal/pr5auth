@@ -258,13 +258,25 @@ export default function App() {
 				} else {
 					notify("success", `Imported ${result.uniques.length} account${result.uniques.length === 1 ? "" : "s"}`);
 				}
-			} catch {
-				// Fallback to legacy vault import for backward compatibility
+			} catch (err: unknown) {
+				const msg = err instanceof Error ? err.message : String(err);
+				const isFormatError = /invalid|unrecognized|no accounts|no valid/i.test(msg);
+				if (!isFormatError) {
+					notify("error", msg || "Import failed — could not save vault");
+					return;
+				}
+				// Format-parsing failure — fallback to legacy vault import for backward compatibility
 				try {
 					const count = await importVault(json);
 					notify("success", `Imported ${count} account${count === 1 ? "" : "s"}`);
-				} catch {
-					notify("error", "Import failed — invalid vault file");
+				} catch (err2: unknown) {
+					const msg2 = err2 instanceof Error ? err2.message : String(err2);
+					const isFormatError2 = /invalid|unrecognized|no accounts|no valid/i.test(msg2);
+					if (!isFormatError2) {
+						notify("error", msg2 || "Import failed — could not save vault");
+					} else {
+						notify("error", "Import failed — invalid vault file");
+					}
 				}
 			}
 		},
