@@ -28,6 +28,6 @@ export interface AppSettings {
 	closeToTray: boolean;
 }
 
-export type Page = "dashboard" | "import" | "settings";
+export type Page = "dashboard" | "import" | "settings" | "about";
 
 export type ImportStrategy = "merge" | "replace" | "skip-duplicates";

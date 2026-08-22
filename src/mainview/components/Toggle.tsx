@@ -12,6 +12,7 @@ export function Toggle({ checked, onChange, label, description, disabled }: Togg
 			type="button"
 			role="switch"
 			aria-checked={checked}
+			aria-label={label}
 			disabled={disabled}
 			onClick={() => onChange(!checked)}
 			className={`group flex w-full items-center justify-between gap-6 rounded-xl px-4 py-3.5 text-left transition-colors ${

@@ -20,6 +20,9 @@ import { Dashboard } from "./pages/Dashboard";
 import { Settings } from "./pages/Settings";
 import { ImportWizard } from "./components/ImportWizard";
 import type { ImportStrategy } from "./services/accountService";
+import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { DashboardSkeleton, PageSkeleton } from "./components/Skeleton";
+import { About } from "./pages/About";
 
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 
@@ -50,6 +53,16 @@ export default function App() {
 	const [vaultLoading, setVaultLoading] = useState(true);
 	const [toasts, setToasts] = useState<ToastItem[]>([]);
 	const [wizardImporting, setWizardImporting] = useState(false);
+
+	useKeyboardShortcuts([
+		{ key: "k", mod: true, handler: () => document.getElementById("account-search")?.focus() },
+		{ key: "n", handler: () => { if (!modalOpen && !locked) { setPage("dashboard"); setModalOpen(true); } } },
+		{ key: "1", handler: () => setPage("dashboard") },
+		{ key: "2", handler: () => setPage("import") },
+		{ key: "3", handler: () => setPage("settings") },
+		{ key: "4", handler: () => setPage("about") },
+		{ key: "Escape", handler: () => { if (modalOpen) { setModalOpen(false); setModalPrefill(undefined); } } },
+	], [modalOpen, locked]);
 
 	const accountsRef = useRef<Account[]>([]);
 	accountsRef.current = accounts;
@@ -456,13 +469,9 @@ export default function App() {
 						</div>
 					)}
 					{vaultLoading ? (
-						<div className="flex h-full items-center justify-center">
-							<div className="h-8 w-8 animate-spin rounded-full border-2 border-white/[0.08] border-t-indigo-500" />
-						</div>
+						<PageSkeleton />
 					) : loading ? (
-						<div className="flex h-full items-center justify-center">
-							<div className="h-8 w-8 animate-spin rounded-full border-2 border-white/[0.08] border-t-indigo-500" />
-						</div>
+						page === "dashboard" ? <DashboardSkeleton /> : <PageSkeleton />
 					) : (
 						<>
 							{page === "dashboard" && (
@@ -498,6 +507,7 @@ export default function App() {
 									onVaultReload={handleVaultReload}
 								/>
 							)}
+							{page === "about" && <About />}
 						</>
 					)}
 				</div>

@@ -1,4 +1,4 @@
-import { LayoutGrid, QrCode, Settings, ShieldCheck } from "lucide-react";
+import { Info, LayoutGrid, QrCode, Settings, ShieldCheck } from "lucide-react";
 import type { Page } from "../types/account";
 
 interface SidebarProps {
@@ -12,6 +12,7 @@ const NAV_ITEMS: { page: Page; label: string; icon: typeof LayoutGrid }[] = [
 	{ page: "dashboard", label: "Authenticator", icon: LayoutGrid },
 	{ page: "import", label: "Import QR", icon: QrCode },
 	{ page: "settings", label: "Settings", icon: Settings },
+	{ page: "about", label: "About", icon: Info },
 ];
 
 export function Sidebar({ page, onNavigate, accountCount, locked }: SidebarProps) {
@@ -44,6 +45,8 @@ export function Sidebar({ page, onNavigate, accountCount, locked }: SidebarProps
 									? "bg-indigo-500/15 text-indigo-300 shadow-inner shadow-indigo-950/40"
 									: "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
 							}`}
+							aria-current={active ? "page" : undefined}
+							aria-label={item.label}
 						>
 							<Icon
 								className={`h-[18px] w-[18px] transition-colors ${
@@ -81,8 +84,9 @@ export function Sidebar({ page, onNavigate, accountCount, locked }: SidebarProps
 					</span>
 				</div>
 				<p className="px-1 text-[10px] font-medium tracking-wider text-slate-600">
-					PR5AUTH v0.1.0 · LOCAL ONLY
+					PR5AUTH v1.0.0 · LOCAL ONLY
 				</p>
+				<p className="px-1 text-[10px] text-slate-700">Shortcuts: ⌘/Ctrl K search · N add</p>
 			</div>
 		</aside>
 	);

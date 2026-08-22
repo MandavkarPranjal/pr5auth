@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { Check, Copy, KeyRound, Trash2 } from "lucide-react";
 import type { Account } from "../types/account";
-import { useTotp } from "../hooks/useTotp";
+import { useTotp } from "../hooks/useTotpShared";
 import { CountdownRing } from "./CountdownRing";
 
 interface AccountCardProps {
@@ -55,6 +55,15 @@ export function AccountCard({ account, onDelete, onCopy }: AccountCardProps) {
 	return (
 		<div
 			onClick={handleCopy}
+			role="button"
+			tabIndex={0}
+			aria-label={`Copy current code for ${account.issuer}, ${account.accountName}`}
+			onKeyDown={(event) => {
+				if (event.key === "Enter" || event.key === " ") {
+					event.preventDefault();
+					handleCopy();
+				}
+			}}
 			className="group relative cursor-pointer overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.03] p-5 backdrop-blur-xl transition-all duration-300 hover:-translate-y-0.5 hover:border-indigo-500/30 hover:bg-white/[0.05] hover:shadow-xl hover:shadow-indigo-950/40"
 		>
 			<div
@@ -79,12 +88,14 @@ export function AccountCard({ account, onDelete, onCopy }: AccountCardProps) {
 
 				<div className="flex items-center gap-1">
 					<button
+						type="button"
 						onClick={(event) => {
 							event.stopPropagation();
 							handleCopy();
 						}}
 						title={copied ? "Copied!" : "Copy code"}
 						className="rounded-lg p-2 text-slate-500 transition-all duration-200 hover:bg-white/[0.06] hover:text-slate-200"
+						aria-label={copied ? "Code copied" : `Copy ${account.issuer} code`}
 					>
 						{copied ? (
 							<Check className="h-4 w-4 text-emerald-400" />
@@ -93,6 +104,7 @@ export function AccountCard({ account, onDelete, onCopy }: AccountCardProps) {
 						)}
 					</button>
 					<button
+						type="button"
 						onClick={(event) => {
 							event.stopPropagation();
 							handleDelete();
@@ -103,6 +115,7 @@ export function AccountCard({ account, onDelete, onCopy }: AccountCardProps) {
 								? "bg-red-500/15 text-red-400"
 								: "text-slate-600 hover:bg-white/[0.06] hover:text-red-400"
 						}`}
+						aria-label={confirmDelete ? `Confirm deleting ${account.issuer}` : `Delete ${account.issuer}`}
 					>
 						{confirmDelete ? (
 							<KeyRound className="h-4 w-4" />
