@@ -1,5 +1,6 @@
 import { Info, LayoutGrid, QrCode, Settings, ShieldCheck } from "lucide-react";
 import type { Page } from "../types/account";
+import { APP_VERSION } from "../constants";
 
 interface SidebarProps {
 	page: Page;
@@ -84,7 +85,7 @@ export function Sidebar({ page, onNavigate, accountCount, locked }: SidebarProps
 					</span>
 				</div>
 				<p className="px-1 text-[10px] font-medium tracking-wider text-slate-600">
-					PR5AUTH v1.0.0 · LOCAL ONLY
+					PR5AUTH v{APP_VERSION} · LOCAL ONLY
 				</p>
 				<p className="px-1 text-[10px] text-slate-700">Shortcuts: ⌘/Ctrl K search · N add</p>
 			</div>
