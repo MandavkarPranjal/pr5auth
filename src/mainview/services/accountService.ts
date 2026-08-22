@@ -455,17 +455,33 @@ function tryParseAegis(parsed: unknown): Account[] | null {
 	}
 }
 
-function tryParseOtpauthUriArray(parsed: unknown): Account[] | null {
+function tryParseOtpauthUriArray(parsed: unknown, warnings?: string[]): Account[] | null {
 	if (!Array.isArray(parsed)) return null;
 	if (parsed.length === 0) return null;
-	// Array of strings that are otpauth URIs?
-	if (parsed.every((v) => typeof v === "string")) {
-		const uris = parsed as string[];
-		if (uris.some((s) => /^otpauth:\/\//i.test(s.trim()))) {
-			const batch = parseOtpauthBatch(uris.join("\n"));
-			if (batch.parsed.length > 0) return createAccountsFromParsed(batch.parsed);
+	const stringEntries = parsed.filter((v): v is string => typeof v === "string");
+	if (stringEntries.length === 0) return null;
+	if (!stringEntries.some((s) => /^otpauth:\/\//i.test(s.trim()))) return null;
+	const nonStringCount = parsed.length - stringEntries.length;
+	if (nonStringCount > 0 && warnings) {
+		for (const item of parsed) {
+			if (typeof item !== "string") {
+				let preview: string;
+				try {
+					preview = JSON.stringify(item)?.slice(0, 80) ?? String(item).slice(0, 80);
+				} catch {
+					preview = String(item).slice(0, 80);
+				}
+				warnings.push(`Non-string entry ignored: ${preview}`);
+			}
 		}
 	}
+	const batch = parseOtpauthBatch(stringEntries.join("\n"));
+	if (warnings) {
+		for (const err of batch.errors) {
+			warnings.push(`${err.raw}: ${err.reason}`);
+		}
+	}
+	if (batch.parsed.length > 0) return createAccountsFromParsed(batch.parsed);
 	return null;
 }
 
@@ -517,7 +533,7 @@ export function parseJsonImport(json: string): JsonImportResult {
 
 	// 2. Plain array of accounts
 	if (Array.isArray(parsed)) {
-		const uriAccounts = tryParseOtpauthUriArray(parsed);
+		const uriAccounts = tryParseOtpauthUriArray(parsed, warnings);
 		if (uriAccounts) return { accounts: uriAccounts, source: "otpauth-uris", warnings };
 		const accounts = (parsed as unknown[]).filter(isValidAccount) as Account[];
 		if (accounts.length > 0) return { accounts, source: "pr5auth-array", warnings };
@@ -530,7 +546,7 @@ export function parseJsonImport(json: string): JsonImportResult {
 		// Check for uris / otpauth arrays
 		for (const key of ["uris", "otpauth", "otpauth_uris", "urls"]) {
 			if (Array.isArray(obj[key])) {
-				const uriAccounts = tryParseOtpauthUriArray(obj[key]);
+				const uriAccounts = tryParseOtpauthUriArray(obj[key], warnings);
 				if (uriAccounts) return { accounts: uriAccounts, source: "otpauth-uris", warnings };
 			}
 		}
@@ -696,8 +712,9 @@ export function buildImportPreview(
 
 export function buildJsonImportPreview(existing: Account[], json: string): ImportPreview {
 	try {
-		const { accounts, source } = parseJsonImport(json);
-		return buildImportPreview(existing, accounts, [], source);
+		const { accounts, source, warnings } = parseJsonImport(json);
+		const errors = warnings.map((w) => ({ raw: w.slice(0, 200), reason: w }));
+		return buildImportPreview(existing, accounts, errors, source);
 	} catch (e) {
 		const msg = e instanceof Error ? e.message : String(e);
 		return {
