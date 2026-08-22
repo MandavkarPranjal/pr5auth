@@ -602,16 +602,37 @@ export function applyMigration(
 	strategy: ImportStrategy = "merge",
 ): Account[] {
 	if (strategy === "replace") {
-		// Replace all with imported, preserving imported order
-		return [...imported];
+		// Ensure imported IDs are unique so deleting one cannot remove both
+		const used = new Set<string>();
+		return imported.map((a) => {
+			if (a.id && !used.has(a.id)) {
+				used.add(a.id);
+				return a;
+			}
+			let nextId: string;
+			do {
+				nextId = createId();
+			} while (used.has(nextId));
+			used.add(nextId);
+			return { ...a, id: nextId };
+		});
 	}
 	// merge / skip-duplicates: keep existing, append uniques with fresh IDs if needed
 	const { uniques } = detectDuplicates(existing, imported);
-	// Ensure uniques have valid IDs
-	const normalizedUniques = uniques.map((a) => ({
-		...a,
-		id: a.id && !existing.some((e) => e.id === a.id) ? a.id : createId(),
-	}));
+	// Track IDs used by existing and already-normalized incoming accounts
+	const usedIds = new Set(existing.map((e) => e.id));
+	const normalizedUniques = uniques.map((a) => {
+		if (a.id && !usedIds.has(a.id)) {
+			usedIds.add(a.id);
+			return a;
+		}
+		let nextId: string;
+		do {
+			nextId = createId();
+		} while (usedIds.has(nextId));
+		usedIds.add(nextId);
+		return { ...a, id: nextId };
+	});
 	return [...existing, ...normalizedUniques];
 }
 
