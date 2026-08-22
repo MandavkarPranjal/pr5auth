@@ -1,19 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Check, ChevronRight, FileJson, Link2, ShieldCheck, Upload, X, ImageUp, Loader2 } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, Link2, ShieldCheck, X, ImageUp, Loader2 } from "lucide-react";
 import type { Account } from "../types/account";
 import type { ImportStrategy, ImportPreview } from "../services/accountService";
 import {
-	buildJsonImportPreview,
 	buildOtpauthImportPreview,
 	createAccountsFromParsed,
-	parseJsonImport,
 	parseOtpauthBatch,
 	detectDuplicates,
 } from "../services/accountService";
 import { decodeQrFromFile } from "../services/qr";
 
 type WizardStep = "source" | "preview" | "confirm";
-type SourceTab = "otpauth" | "json" | "qr";
+type SourceTab = "otpauth" | "qr";
 
 interface ImportWizardProps {
 	existingAccounts: Account[];
@@ -25,15 +23,12 @@ export function ImportWizard({ existingAccounts, onImport, onClose }: ImportWiza
 	const [step, setStep] = useState<WizardStep>("source");
 	const [sourceTab, setSourceTab] = useState<SourceTab>("otpauth");
 	const [otpauthInput, setOtpauthInput] = useState("");
-	const [jsonText, setJsonText] = useState<string | null>(null);
-	const [jsonFileName, setJsonFileName] = useState<string | null>(null);
 	const [strategy, setStrategy] = useState<ImportStrategy>("merge");
 	const [importing, setImporting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [qrError, setQrError] = useState<string | null>(null);
 	const [qrScanning, setQrScanning] = useState(false);
 	const [importSummary, setImportSummary] = useState<{ totalValid: number; totalUniques: number; totalDuplicates: number; strategy: ImportStrategy } | null>(null);
-	const fileInputRef = useRef<HTMLInputElement>(null);
 	const qrFileInputRef = useRef<HTMLInputElement>(null);
 
 	// Derived preview
@@ -42,12 +37,7 @@ export function ImportWizard({ existingAccounts, onImport, onClose }: ImportWiza
 		return buildOtpauthImportPreview(existingAccounts, otpauthInput);
 	}, [existingAccounts, otpauthInput, sourceTab]);
 
-	const jsonPreview: ImportPreview | null = useMemo(() => {
-		if (sourceTab !== "json" || jsonText === null) return null;
-		return buildJsonImportPreview(existingAccounts, jsonText);
-	}, [existingAccounts, jsonText, sourceTab]);
-
-	const activePreview = sourceTab === "otpauth" ? otpauthPreview : jsonPreview;
+	const activePreview = otpauthPreview;
 
 	const candidates: Account[] = useMemo(() => {
 		if (sourceTab === "otpauth") {
@@ -55,16 +45,8 @@ export function ImportWizard({ existingAccounts, onImport, onClose }: ImportWiza
 			const { parsed } = parseOtpauthBatch(otpauthInput);
 			return createAccountsFromParsed(parsed);
 		}
-		if (sourceTab === "json" && jsonText !== null) {
-			try {
-				const { accounts } = parseJsonImport(jsonText);
-				return accounts;
-			} catch {
-				return [];
-			}
-		}
 		return [];
-	}, [otpauthInput, jsonText, sourceTab]);
+	}, [otpauthInput, sourceTab]);
 
 	const duplicateInfo = useMemo(() => {
 		if (candidates.length === 0) return { duplicates: [] as Account[], uniques: [] as Account[] };
@@ -73,35 +55,13 @@ export function ImportWizard({ existingAccounts, onImport, onClose }: ImportWiza
 
 	const canProceedToPreview = useMemo(() => {
 		if (sourceTab === "otpauth") return otpauthPreview !== null && otpauthPreview.valid > 0;
-		if (sourceTab === "json") return jsonPreview !== null && jsonPreview.valid > 0;
 		return false;
-	}, [sourceTab, otpauthPreview, jsonPreview]);
+	}, [sourceTab, otpauthPreview]);
 
 	useEffect(() => {
 		// Reset error when input changes
 		setError(null);
-	}, [otpauthInput, jsonText, sourceTab]);
-
-	async function handleJsonFile(file: File | null | undefined) {
-		if (!file) return;
-		setError(null);
-		setJsonFileName(file.name);
-		try {
-			const text = await file.text();
-			// Validate JSON early to give feedback
-			try {
-				JSON.parse(text);
-			} catch {
-				setError("Invalid JSON file – not a valid JSON document.");
-				setJsonText(null);
-				return;
-			}
-			setJsonText(text);
-			setStep("preview");
-		} catch {
-			setError("Could not read JSON file.");
-		}
-	}
+	}, [otpauthInput, sourceTab]);
 
 	async function handleQrFile(file: File | null | undefined) {
 		if (!file) return;
@@ -174,7 +134,7 @@ export function ImportWizard({ existingAccounts, onImport, onClose }: ImportWiza
 					<div>
 						<h2 className="text-2xl font-semibold tracking-tight text-white">Import wizard</h2>
 						<p className="mt-0.5 text-sm text-slate-500">
-							Import standard otpauth entries or exported JSON files — with migration and duplicate handling
+							Import standard otpauth entries via URI or QR — with duplicate handling
 						</p>
 					</div>
 					{onClose && (
@@ -219,7 +179,6 @@ export function ImportWizard({ existingAccounts, onImport, onClose }: ImportWiza
 					<div className="flex gap-2 rounded-xl border border-white/[0.07] bg-white/[0.02] p-1.5">
 						{[
 							{ id: "otpauth", label: "otpauth URI", icon: Link2 },
-							{ id: "json", label: "JSON file", icon: FileJson },
 							{ id: "qr", label: "QR image", icon: ImageUp },
 						].map((tab) => {
 							const Icon = tab.icon as typeof Link2;
@@ -289,77 +248,6 @@ export function ImportWizard({ existingAccounts, onImport, onClose }: ImportWiza
 								>
 									Continue <ChevronRight className="h-4 w-4" />
 								</button>
-							</div>
-						</div>
-					)}
-
-					{sourceTab === "json" && (
-						<div className="space-y-4">
-							<div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5">
-								<div className="mb-3 flex items-center gap-2.5">
-									<div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/[0.04]">
-										<FileJson className="h-4 w-4 text-slate-400" />
-									</div>
-									<h3 className="text-sm font-semibold text-slate-200">Import from exported JSON</h3>
-								</div>
-								<p className="mb-3 text-xs leading-relaxed text-slate-500">
-									Supports PR5Auth vault exports, plain account arrays, and Aegis JSON. Migration is handled automatically.
-								</p>
-
-								<div
-									onClick={() => fileInputRef.current?.click()}
-									className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-white/[0.1] bg-white/[0.02] p-8 text-center transition-all hover:border-indigo-500/30 hover:bg-white/[0.04]"
-								>
-									<div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-500/10">
-										<Upload className="h-6 w-6 text-indigo-400" />
-									</div>
-									<p className="mt-4 text-sm font-medium text-slate-200">
-										{jsonFileName ? jsonFileName : "Upload JSON file"}
-									</p>
-									<p className="mt-1 text-xs text-slate-500">Click to browse · application/json</p>
-								</div>
-								<input
-									ref={fileInputRef}
-									type="file"
-									accept="application/json,.json"
-									className="hidden"
-									onChange={(e) => {
-										void handleJsonFile(e.target.files?.[0]);
-										e.target.value = "";
-									}}
-								/>
-
-								{jsonPreview && (
-									<div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3">
-										<p className="text-sm font-medium text-emerald-200">
-											Found {jsonPreview.valid} account{jsonPreview.valid === 1 ? "" : "s"} in {jsonPreview.source}
-										</p>
-										<p className="mt-0.5 text-[11px] text-emerald-400/70">
-											{jsonPreview.uniques} new · {jsonPreview.duplicates} duplicate{jsonPreview.duplicates === 1 ? "" : "s"} · {jsonPreview.invalid} invalid
-										</p>
-									</div>
-								)}
-
-								{jsonPreview && jsonPreview.valid > 0 && (
-									<div className="mt-4 flex justify-end">
-										<button
-											onClick={() => setStep("preview")}
-											className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-950/50 transition-all hover:bg-indigo-500"
-										>
-											Continue <ChevronRight className="h-4 w-4" />
-										</button>
-									</div>
-								)}
-							</div>
-
-							<div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5 text-xs leading-relaxed text-slate-500">
-								<p className="text-[10px] font-semibold uppercase tracking-widest text-slate-600">Migration workflow</p>
-								<ul className="mt-2.5 space-y-1.5">
-									<li>1 · File is parsed and validated offline.</li>
-									<li>2 · Accounts are checked for duplicates (issuer + name or secret).</li>
-									<li>3 · Choose “Merge” to skip duplicates or “Replace” to overwrite.</li>
-									<li>4 · Vault is saved atomically — nothing leaves this device.</li>
-								</ul>
 							</div>
 						</div>
 					)}
@@ -543,7 +431,7 @@ export function ImportWizard({ existingAccounts, onImport, onClose }: ImportWiza
 							Done
 						</button>
 					) : (
-						<button onClick={() => { setStep("source"); setOtpauthInput(""); setJsonText(null); setJsonFileName(null); setImportSummary(null); }} className="mt-6 rounded-xl bg-white/[0.06] px-5 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.08]">
+						<button onClick={() => { setStep("source"); setOtpauthInput(""); setImportSummary(null); }} className="mt-6 rounded-xl bg-white/[0.06] px-5 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.08]">
 							Import more
 						</button>
 					)}
