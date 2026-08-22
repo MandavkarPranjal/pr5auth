@@ -271,7 +271,7 @@ export default function App() {
 					notify("success", `Imported ${count} account${count === 1 ? "" : "s"}`);
 				} catch (err2: unknown) {
 					const msg2 = err2 instanceof Error ? err2.message : String(err2);
-					const isFormatError2 = /invalid|unrecognized|no accounts|no valid/i.test(msg2);
+					const isFormatError2 = err2 instanceof SyntaxError || /invalid|unrecognized|no accounts|no valid/i.test(msg2);
 					if (!isFormatError2) {
 						notify("error", msg2 || "Import failed — could not save vault");
 					} else {
@@ -429,7 +429,12 @@ export default function App() {
 							</div>
 							<div className="flex shrink-0 items-center gap-2">
 								<button
+									disabled={wizardImporting}
 									onClick={() => {
+										if (wizardImporting) {
+											notify("info", "Import in progress — please wait");
+											return;
+										}
 										void resetVault().catch((err: unknown) =>
 											notify(
 												"error",
@@ -439,7 +444,7 @@ export default function App() {
 											),
 										);
 									}}
-									className="rounded-lg border border-red-400/30 px-3 py-1.5 text-xs font-medium text-red-200 hover:bg-red-400/10"
+									className="rounded-lg border border-red-400/30 px-3 py-1.5 text-xs font-medium text-red-200 hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-50"
 								>
 									Reset vault
 								</button>
