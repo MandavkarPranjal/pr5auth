@@ -169,7 +169,7 @@ export function useAccounts(): UseAccountsResult {
 					imported = parseVaultImport(json);
 				} catch (err) {
 					const msg = err instanceof Error ? err.message : String(err);
-					if (/No accounts found/.test(msg)) {
+					if (/no valid accounts|no accounts found/i.test(msg)) {
 						try {
 							const parsed: unknown = JSON.parse(json);
 							if (typeof parsed === "object" && parsed !== null) {
