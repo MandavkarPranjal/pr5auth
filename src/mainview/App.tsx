@@ -48,6 +48,7 @@ export default function App() {
 	const [vaultStatus, setVaultStatus] = useState<VaultStatus | null>(null);
 	const [vaultLoading, setVaultLoading] = useState(true);
 	const [toasts, setToasts] = useState<ToastItem[]>([]);
+	const [wizardImporting, setWizardImporting] = useState(false);
 
 	const accountsRef = useRef<Account[]>([]);
 	accountsRef.current = accounts;
@@ -182,6 +183,10 @@ export default function App() {
 
 	const handleSaveAccount = useCallback(
 		(input: AddAccountInput) => {
+			if (wizardImporting) {
+				notify("info", "Import in progress — please wait");
+				return;
+			}
 			void addAccount(input)
 				.then(() => {
 					setModalOpen(false);
@@ -195,11 +200,15 @@ export default function App() {
 					);
 				});
 		},
-		[addAccount, notify],
+		[addAccount, notify, wizardImporting],
 	);
 
 	const handleDelete = useCallback(
 		(id: string) => {
+			if (wizardImporting) {
+				notify("info", "Import in progress — please wait");
+				return;
+			}
 			void deleteAccount(id)
 				.then(() => notify("info", "Account removed"))
 				.catch((err: unknown) => {
@@ -209,7 +218,7 @@ export default function App() {
 					);
 				});
 		},
-		[deleteAccount, notify],
+		[deleteAccount, notify, wizardImporting],
 	);
 
 	const handleCopy = useCallback(
@@ -264,21 +273,37 @@ export default function App() {
 
 	const handleWizardImport = useCallback(
 		async (toImport: Account[], strategy: ImportStrategy) => {
-			if (strategy === "replace") {
-				await replaceAll(toImport);
-				notify("success", `Vault replaced with ${toImport.length} account${toImport.length === 1 ? "" : "s"}`);
-			} else {
-				const result = await importAccounts(toImport, strategy);
-				if (result.duplicates.length > 0 && result.uniques.length === 0) {
-					notify("info", "All accounts were duplicates — nothing imported");
-				} else if (result.duplicates.length > 0) {
-					notify("success", `Imported ${result.uniques.length} new, skipped ${result.duplicates.length} duplicate${result.duplicates.length === 1 ? "" : "s"}`);
+			setWizardImporting(true);
+			try {
+				if (strategy === "replace") {
+					await replaceAll(toImport);
+					notify("success", `Vault replaced with ${toImport.length} account${toImport.length === 1 ? "" : "s"}`);
 				} else {
-					notify("success", `Imported ${result.uniques.length} account${result.uniques.length === 1 ? "" : "s"}`);
+					const result = await importAccounts(toImport, strategy);
+					if (result.duplicates.length > 0 && result.uniques.length === 0) {
+						notify("info", "All accounts were duplicates — nothing imported");
+					} else if (result.duplicates.length > 0) {
+						notify("success", `Imported ${result.uniques.length} new, skipped ${result.duplicates.length} duplicate${result.duplicates.length === 1 ? "" : "s"}`);
+					} else {
+						notify("success", `Imported ${result.uniques.length} account${result.uniques.length === 1 ? "" : "s"}`);
+					}
 				}
+			} finally {
+				setWizardImporting(false);
 			}
 		},
 		[replaceAll, importAccounts, notify],
+	);
+
+	const handleNavigate = useCallback(
+		(next: Page) => {
+			if (wizardImporting) {
+				notify("info", "Import in progress — please wait");
+				return;
+			}
+			setPage(next);
+		},
+		[wizardImporting, notify],
 	);
 
 	// Auto-lock after inactivity when enabled.
@@ -373,7 +398,7 @@ export default function App() {
 
 			<Sidebar
 				page={page}
-				onNavigate={setPage}
+				onNavigate={handleNavigate}
 				accountCount={accounts.length}
 				locked={locked}
 			/>
@@ -430,6 +455,10 @@ export default function App() {
 								<Dashboard
 									accounts={accounts}
 									onAdd={() => {
+										if (wizardImporting) {
+											notify("info", "Import in progress — please wait");
+											return;
+										}
 										setModalPrefill(undefined);
 										setModalOpen(true);
 									}}

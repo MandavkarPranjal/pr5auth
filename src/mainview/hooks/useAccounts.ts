@@ -56,6 +56,13 @@ export function useAccounts(): UseAccountsResult {
 	const [storageStatus, setStorageStatus] = useState<StorageStatus | null>(null);
 	const [reloadToken, setReloadToken] = useState(0);
 	const accountsRef = useRef<Account[]>([]);
+	const mutationQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+
+	const enqueue = useCallback(<T>(task: () => Promise<T>): Promise<T> => {
+		const next = mutationQueueRef.current.then(task, task) as Promise<T>;
+		mutationQueueRef.current = next.catch(() => {}) as Promise<unknown>;
+		return next;
+	}, []);
 
 	const persist = useCallback(async (next: Account[], isStale?: () => boolean) => {
 		if (isStale?.()) return;
@@ -120,68 +127,80 @@ export function useAccounts(): UseAccountsResult {
 	}, [persist, reloadToken]);
 
 	const addAccount = useCallback(
-		async (input: AddAccountInput) => {
-			const updated = addAccountToStore(accountsRef.current, input);
-			await persist(updated);
+		(input: AddAccountInput) => {
+			return enqueue(async () => {
+				const updated = addAccountToStore(accountsRef.current, input);
+				await persist(updated);
+			});
 		},
-		[persist],
+		[persist, enqueue],
 	);
 
 	const deleteAccount = useCallback(
-		async (id: string) => {
-			const updated = deleteAccountFromStore(accountsRef.current, id);
-			await persist(updated);
+		(id: string) => {
+			return enqueue(async () => {
+				const updated = deleteAccountFromStore(accountsRef.current, id);
+				await persist(updated);
+			});
 		},
-		[persist],
+		[persist, enqueue],
 	);
 
 	const importVault = useCallback(
-		async (json: string) => {
-			const imported = parseVaultImport(json);
-			if (imported.length === 0) throw new Error("No accounts found in vault");
-			await persist(imported);
-			return imported.length;
+		(json: string) => {
+			return enqueue(async () => {
+				const imported = parseVaultImport(json);
+				if (imported.length === 0) throw new Error("No accounts found in vault");
+				await persist(imported);
+				return imported.length;
+			});
 		},
-		[persist],
+		[persist, enqueue],
 	);
 
 	const importJson = useCallback(
-		async (json: string, strategy: ImportStrategy = "merge") => {
-			const { accounts: imported } = parseJsonImport(json);
-			if (imported.length === 0) throw new Error("No accounts found in vault");
-			const plan = planMigration(accountsRef.current, imported, strategy);
-			const next = applyMigration(accountsRef.current, imported, strategy);
-			await persist(next);
-			return { ...plan, imported: plan.uniques.length };
+		(json: string, strategy: ImportStrategy = "merge") => {
+			return enqueue(async () => {
+				const { accounts: imported } = parseJsonImport(json);
+				if (imported.length === 0) throw new Error("No accounts found in vault");
+				const plan = planMigration(accountsRef.current, imported, strategy);
+				const next = applyMigration(accountsRef.current, imported, strategy);
+				await persist(next);
+				return { ...plan, imported: plan.uniques.length };
+			});
 		},
-		[persist],
+		[persist, enqueue],
 	);
 
 	const importOtpauth = useCallback(
-		async (input: string, strategy: ImportStrategy = "merge") => {
-			const { parsed, errors } = parseOtpauthBatch(input);
-			if (parsed.length === 0) {
-				const reason = errors[0]?.reason ?? "No valid otpauth entries found";
-				throw new Error(reason);
-			}
-			const imported = createAccountsFromParsed(parsed);
-			const plan = planMigration(accountsRef.current, imported, strategy);
-			const next = applyMigration(accountsRef.current, imported, strategy);
-			await persist(next);
-			return { ...plan, imported: plan.uniques.length };
+		(input: string, strategy: ImportStrategy = "merge") => {
+			return enqueue(async () => {
+				const { parsed, errors } = parseOtpauthBatch(input);
+				if (parsed.length === 0) {
+					const reason = errors[0]?.reason ?? "No valid otpauth entries found";
+					throw new Error(reason);
+				}
+				const imported = createAccountsFromParsed(parsed);
+				const plan = planMigration(accountsRef.current, imported, strategy);
+				const next = applyMigration(accountsRef.current, imported, strategy);
+				await persist(next);
+				return { ...plan, imported: plan.uniques.length };
+			});
 		},
-		[persist],
+		[persist, enqueue],
 	);
 
 	const importAccounts = useCallback(
-		async (accountsToImport: Account[], strategy: ImportStrategy = "merge") => {
-			if (accountsToImport.length === 0) throw new Error("No accounts to import");
-			const plan = planMigration(accountsRef.current, accountsToImport, strategy);
-			const next = applyMigration(accountsRef.current, accountsToImport, strategy);
-			await persist(next);
-			return { ...plan, imported: plan.uniques.length };
+		(accountsToImport: Account[], strategy: ImportStrategy = "merge") => {
+			return enqueue(async () => {
+				if (accountsToImport.length === 0) throw new Error("No accounts to import");
+				const plan = planMigration(accountsRef.current, accountsToImport, strategy);
+				const next = applyMigration(accountsRef.current, accountsToImport, strategy);
+				await persist(next);
+				return { ...plan, imported: plan.uniques.length };
+			});
 		},
-		[persist],
+		[persist, enqueue],
 	);
 
 	const previewJsonImport = useCallback(
@@ -206,56 +225,58 @@ export function useAccounts(): UseAccountsResult {
 	);
 
 	const replaceAll = useCallback(
-		async (next: Account[]) => {
-			await persist(next);
+		(next: Account[]) => {
+			return enqueue(() => persist(next));
 		},
-		[persist],
+		[persist, enqueue],
 	);
 
-	const resetVault = useCallback(async () => {
-		try {
-			if (isSecureStorageAvailable()) {
-				await resetVaultWithPassword();
-			} else {
-				await storage.clearVault();
-			}
-		} catch (err) {
-			setError(toErrorMessage(err));
-			throw err;
-		}
-		// Vault has been deleted – drop stale UI state immediately. On
-		// desktop installations without an OS-keychain fallback there is no
-		// writable key until a master password is created (VaultLocked with
-		// fallback=null). Reseeding mock accounts would then throw
-		// "No encryption key available" and previously left stale accounts
-		// plus a storage error. Clearing first ensures we either reseed
-		// successfully or stay empty and let the password-creation UI take
-		// over.
-		accountsRef.current = [];
-		setAccounts([]);
-		setError(null);
-		try {
+	const resetVault = useCallback(() => {
+		return enqueue(async () => {
 			try {
-				const status = await storage.getStatus();
-				setStorageStatus(status);
-			} catch {
-				// ignore – persist will surface storage errors
+				if (isSecureStorageAvailable()) {
+					await resetVaultWithPassword();
+				} else {
+					await storage.clearVault();
+				}
+			} catch (err) {
+				setError(toErrorMessage(err));
+				throw err;
 			}
-			await persist(createMockAccounts());
-		} catch (err) {
-			const msg = toErrorMessage(err);
-			if (/unavailable|no encryption key|no key storage/i.test(msg)) {
-				// No writable key yet (e.g. fallback null + no password) – keep
-				// empty and don't surface a storage error; App shows the
-				// LockScreen in "create" mode via vaultStatus.
-				accountsRef.current = [];
-				setAccounts([]);
-				setError(null);
-				return;
+			// Vault has been deleted – drop stale UI state immediately. On
+			// desktop installations without an OS-keychain fallback there is no
+			// writable key until a master password is created (VaultLocked with
+			// fallback=null). Reseeding mock accounts would then throw
+			// "No encryption key available" and previously left stale accounts
+			// plus a storage error. Clearing first ensures we either reseed
+			// successfully or stay empty and let the password-creation UI take
+			// over.
+			accountsRef.current = [];
+			setAccounts([]);
+			setError(null);
+			try {
+				try {
+					const status = await storage.getStatus();
+					setStorageStatus(status);
+				} catch {
+					// ignore – persist will surface storage errors
+				}
+				await persist(createMockAccounts());
+			} catch (err) {
+				const msg = toErrorMessage(err);
+				if (/unavailable|no encryption key|no key storage/i.test(msg)) {
+					// No writable key yet (e.g. fallback null + no password) – keep
+					// empty and don't surface a storage error; App shows the
+					// LockScreen in "create" mode via vaultStatus.
+					accountsRef.current = [];
+					setAccounts([]);
+					setError(null);
+					return;
+				}
+				throw err;
 			}
-			throw err;
-		}
-	}, [persist]);
+		});
+	}, [persist, enqueue]);
 
 	const clearError = useCallback(() => setError(null), []);
 
