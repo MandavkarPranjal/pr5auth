@@ -33,6 +33,7 @@ export interface UseAccountsResult {
 	addAccount: (input: AddAccountInput) => Promise<void>;
 	deleteAccount: (id: string) => Promise<void>;
 	importVault: (json: string) => Promise<number>;
+	restoreVault: (json: string) => Promise<number>;
 	importJson: (json: string, strategy?: ImportStrategy) => Promise<MigrationPlan & { imported: number }>;
 	importOtpauth: (input: string, strategy?: ImportStrategy) => Promise<MigrationPlan & { imported: number }>;
 	importAccounts: (accountsToImport: Account[], strategy?: ImportStrategy) => Promise<MigrationPlan & { imported: number }>;
@@ -151,6 +152,50 @@ export function useAccounts(): UseAccountsResult {
 			return enqueue(async () => {
 				const imported = parseVaultImport(json);
 				if (imported.length === 0) throw new Error("No accounts found in vault");
+				await persist(imported);
+				return imported.length;
+			});
+		},
+		[persist, enqueue],
+	);
+
+	const restoreVault = useCallback(
+		(json: string) => {
+			return enqueue(async () => {
+				// Restore must replace vault state exactly, including empty vaults.
+				// parseVaultImport rejects empty lists, so handle empty payload explicitly.
+				let imported: Account[];
+				try {
+					imported = parseVaultImport(json);
+				} catch (err) {
+					const msg = err instanceof Error ? err.message : String(err);
+					if (/No accounts found/.test(msg)) {
+						try {
+							const parsed: unknown = JSON.parse(json);
+							if (typeof parsed === "object" && parsed !== null) {
+								const cand = parsed as Record<string, unknown>;
+								if (Array.isArray(cand.accounts)) {
+									// Valid vault file with empty accounts — allow restore to empty
+									if (cand.accounts.length === 0) {
+										imported = [];
+									} else {
+										throw err;
+									}
+								} else if (Array.isArray(parsed) && (parsed as unknown[]).length === 0) {
+									imported = [];
+								} else {
+									throw err;
+								}
+							} else {
+								throw err;
+							}
+						} catch {
+							throw err;
+						}
+					} else {
+						throw err;
+					}
+				}
 				await persist(imported);
 				return imported.length;
 			});
@@ -288,6 +333,7 @@ export function useAccounts(): UseAccountsResult {
 		addAccount,
 		deleteAccount,
 		importVault,
+		restoreVault,
 		importJson,
 		importOtpauth,
 		importAccounts,
