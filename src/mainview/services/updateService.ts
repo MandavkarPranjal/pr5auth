@@ -101,10 +101,12 @@ class UpdateService {
 		}
 
 		if (mapped) {
+			const isDownloadComplete = raw === "download-complete" || raw === "patch-chain-complete"
 			this.setState({
 				status: mapped,
 				progress: progress ?? this.state.progress,
 				error: event.errorMessage ?? (mapped === "failed" ? event.message : null),
+				...(isDownloadComplete ? { updateReady: true } : {}),
 			})
 		} else if (progress !== null && progress !== this.state.progress) {
 			this.setState({ progress })
@@ -203,6 +205,13 @@ class UpdateService {
 			}
 			this.state = next
 			for (const cb of this.listeners) cb({ ...next })
+			// Handler returns optimistically (fire-and-forget) to avoid RPC timeout.
+			// If still downloading, poll `updater:getState` until the background
+			// download completes and `updateReady` becomes true.
+			if (next.status === "downloading" && !next.updateReady && !next.error) {
+				const polled = await this.pollForDownloadCompletion(rpc)
+				return polled
+			}
 			return next
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err)
@@ -211,6 +220,43 @@ class UpdateService {
 			for (const cb of this.listeners) cb({ ...failed })
 			return failed
 		}
+	}
+
+	private async pollForDownloadCompletion(
+		rpc: NonNullable<ReturnType<typeof this.getRpc>>,
+	): Promise<UpdateStatePayload> {
+		const timeoutMs = 120_000
+		const intervalMs = 700
+		const start = Date.now()
+		while (Date.now() - start < timeoutMs) {
+			await new Promise((r) => setTimeout(r, intervalMs))
+			if (this.state.updateReady && this.state.status !== "failed") {
+				return { ...this.state }
+			}
+			if (this.state.status === "failed" && this.state.error) {
+				return { ...this.state }
+			}
+			try {
+				const s: UpdateStatePayload = await rpc.request["updater:getState"]()
+				const changed =
+					s.status !== this.state.status ||
+					s.progress !== this.state.progress ||
+					s.updateReady !== this.state.updateReady ||
+					s.error !== this.state.error ||
+					s.newVersion !== this.state.newVersion ||
+					s.checkedAt !== this.state.checkedAt
+				if (changed) {
+					this.state = { ...this.state, ...s }
+					for (const cb of this.listeners) cb({ ...this.state })
+				}
+				if (s.updateReady) return { ...this.state }
+				if (s.status === "failed" || s.error) return { ...this.state }
+				if (s.status !== "downloading") return { ...this.state }
+			} catch {
+				// ignore transient RPC failures and keep polling
+			}
+		}
+		return { ...this.state }
 	}
 
 	async installUpdate(): Promise<void> {
@@ -240,8 +286,15 @@ class UpdateService {
 		}
 	}
 
+	private lastRefreshAt = 0
+	private readonly REFRESH_COOLDOWN_MS = 4000
+
 	async refreshState(): Promise<UpdateStatePayload> {
 		if (this.refreshPromise) return this.refreshPromise
+		// Coalesce rapid sequential refreshes (e.g., multiple useUpdateState mounts)
+		if (Date.now() - this.lastRefreshAt < this.REFRESH_COOLDOWN_MS) {
+			return { ...this.state }
+		}
 		const rpc = this.getRpc()
 		if (!rpc) return { ...this.state }
 		this.refreshPromise = (async () => {
@@ -255,6 +308,7 @@ class UpdateService {
 			} catch {
 				return { ...this.state }
 			} finally {
+				this.lastRefreshAt = Date.now()
 				this.refreshPromise = null
 			}
 		})()
@@ -272,6 +326,7 @@ class UpdateService {
 		this.progressHandler = null
 		this.installingPromise = null
 		this.refreshPromise = null
+		this.lastRefreshAt = 0
 		this.state = { ...INITIAL_STATE }
 		this.hasAutoChecked = false
 		this.listeners.clear()
