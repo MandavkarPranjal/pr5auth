@@ -34,6 +34,7 @@ class UpdateService {
 	private progressBound = false
 	private progressHandler: EventListener | null = null
 	private installingPromise: Promise<void> | null = null
+	private refreshPromise: Promise<UpdateStatePayload> | null = null
 
 	private ensureProgressListener() {
 		if (this.progressBound) return
@@ -240,18 +241,24 @@ class UpdateService {
 	}
 
 	async refreshState(): Promise<UpdateStatePayload> {
+		if (this.refreshPromise) return this.refreshPromise
 		const rpc = this.getRpc()
 		if (!rpc) return { ...this.state }
-		try {
-			const s: UpdateStatePayload = await rpc.request["updater:getState"]()
-			if (s.checkedAt && (!this.state.checkedAt || s.checkedAt >= this.state.checkedAt)) {
-				this.state = { ...this.state, ...s }
-				for (const cb of this.listeners) cb({ ...this.state })
+		this.refreshPromise = (async () => {
+			try {
+				const s: UpdateStatePayload = await rpc.request["updater:getState"]()
+				if (s.checkedAt && (!this.state.checkedAt || s.checkedAt >= this.state.checkedAt)) {
+					this.state = { ...this.state, ...s }
+					for (const cb of this.listeners) cb({ ...this.state })
+				}
+				return { ...this.state }
+			} catch {
+				return { ...this.state }
+			} finally {
+				this.refreshPromise = null
 			}
-			return { ...this.state }
-		} catch {
-			return { ...this.state }
-		}
+		})()
+		return this.refreshPromise
 	}
 
 	resetForTests() {
@@ -264,6 +271,7 @@ class UpdateService {
 		}
 		this.progressHandler = null
 		this.installingPromise = null
+		this.refreshPromise = null
 		this.state = { ...INITIAL_STATE }
 		this.hasAutoChecked = false
 		this.listeners.clear()
