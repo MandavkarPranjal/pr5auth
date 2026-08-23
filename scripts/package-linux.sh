@@ -40,7 +40,7 @@ exec "${HERE}/bin/launcher" "$@"
 EOF
 chmod 755 "${WORK_DIR}/AppDir/AppRun"
 
-cp "${ROOT_DIR}/assets/tray-icon.png" "${WORK_DIR}/AppDir/appIcon.png"
+cp "${ROOT_DIR}/assets/app-icon.png" "${WORK_DIR}/AppDir/appIcon.png"
 cat > "${WORK_DIR}/AppDir/PR5Auth.desktop" <<'EOF'
 [Desktop Entry]
 Version=1.0
