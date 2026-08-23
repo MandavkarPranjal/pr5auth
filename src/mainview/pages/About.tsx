@@ -1,10 +1,7 @@
 import { ShieldCheck, Sparkles } from "lucide-react";
 import { APP_VERSION } from "../constants";
-import { useLiveVersion } from "../hooks/useUpdateState";
 
 export function About() {
-	const liveVersionRaw = useLiveVersion();
-	const liveVersion = liveVersionRaw || APP_VERSION;
 	return (
 		<div className="flex h-full flex-col overflow-y-auto">
 			<header className="pb-6">
@@ -23,7 +20,7 @@ export function About() {
 						</div>
 					</div>
 					<div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
-						{[["Version", liveVersion], ["Privacy", "Local only"], ["License", "Open source"]].map(([label, value]) => (
+						{[["Version", APP_VERSION], ["Privacy", "Local only"], ["License", "Open source"]].map(([label, value]) => (
 							<div key={label} className="rounded-xl border border-white/[0.03] bg-black/[0.03] p-3">
 								<p className="text-[10px] font-semibold uppercase tracking-wider text-white">{label}</p>
 								<p className="mt-1 text-sm font-medium text-slate-400">{value}</p>

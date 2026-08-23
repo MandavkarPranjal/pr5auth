@@ -496,7 +496,7 @@ export function Settings({
 						<div className="flex flex-wrap items-start justify-between gap-4">
 							<div>
 								<p className="text-sm font-medium text-slate-200">Current version</p>
-								<p className="mt-1 font-mono text-sm tabular-nums text-slate-400">{updateState.currentVersion || APP_VERSION}</p>
+								<p className="mt-1 font-mono text-sm tabular-nums text-slate-400">{APP_VERSION}</p>
 								{updateState.channel && (
 									<p className="mt-1 text-xs text-slate-500">Channel: <span className="font-mono">{updateState.channel}</span></p>
 								)}
@@ -647,7 +647,7 @@ export function Settings({
 							</p>
 							<div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
 								<span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 font-medium tabular-nums text-slate-400">
-									Version {updateState.currentVersion || APP_VERSION}
+									Version {APP_VERSION}
 								</span>
 								<span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 font-medium text-slate-400">
 									Offline-first

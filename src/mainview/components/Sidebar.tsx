@@ -1,7 +1,6 @@
 import { Info, LayoutGrid, QrCode, Settings, ShieldCheck } from "lucide-react";
 import type { Page } from "../types/account";
 import { APP_VERSION } from "../constants";
-import { useLiveVersion } from "../hooks/useUpdateState";
 
 interface SidebarProps {
 	page: Page;
@@ -18,8 +17,6 @@ const NAV_ITEMS: { page: Page; label: string; icon: typeof LayoutGrid }[] = [
 ];
 
 export function Sidebar({ page, onNavigate, accountCount, locked }: SidebarProps) {
-	const liveVersionRaw = useLiveVersion();
-	const liveVersion = liveVersionRaw || APP_VERSION;
 	return (
 		<aside className="app-sidebar flex h-full w-60 shrink-0 flex-col border-r border-white/[0.03] bg-black">
 			<div className="flex items-center gap-3 px-5 pt-6 pb-8">
@@ -88,7 +85,7 @@ export function Sidebar({ page, onNavigate, accountCount, locked }: SidebarProps
 					</span>
 				</div>
 				<p className="px-1 text-[10px] font-medium text-slate-400">
-					PR5AUTH v{liveVersion} · LOCAL ONLY
+					PR5AUTH v{APP_VERSION} · LOCAL ONLY
 				</p>
 				<p className="px-1 text-[10px] text-slate-500">Shortcuts: ⌘/Ctrl K search · N add</p>
 			</div>
