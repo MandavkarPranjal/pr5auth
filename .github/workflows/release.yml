@@ -48,8 +48,25 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Validate source
         run: bun run check
+      - name: Download AppImage tool
+        if: matrix.os == 'linux'
+        shell: bash
+        run: |
+          mkdir -p .cache
+          case "$(uname -m)" in
+            x86_64) tool_arch=x86_64 ;;
+            aarch64) tool_arch=aarch64 ;;
+            *) echo "Unsupported runner architecture: $(uname -m)"; exit 1 ;;
+          esac
+          curl --fail --location --retry 3 \
+            "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${tool_arch}.AppImage" \
+            --output ".cache/appimagetool-${tool_arch}.AppImage"
+          chmod +x ".cache/appimagetool-${tool_arch}.AppImage"
       - name: Build release package
         run: bun run build:release
+      - name: Package Linux formats
+        if: matrix.os == 'linux'
+        run: bun run package:linux
       - name: Upload platform artifacts
         uses: actions/upload-artifact@v4
         with:
