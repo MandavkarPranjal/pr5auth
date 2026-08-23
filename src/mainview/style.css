@@ -157,8 +157,8 @@ body {
 
 /* Consistent controls across pages, forms, and dialogs. */
 input, textarea, select {
-	border-color: #27272a !important;
-	background-color: #141417 !important;
+	border-color: #27272a;
+	background-color: #141417;
 }
 
 button {
@@ -206,7 +206,7 @@ button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 [role="button"]:focus-visible {
-	outline: 2px solid #18181b;
+	outline: 2px solid #f4f4f5;
 	outline-offset: 2px;
 }
 

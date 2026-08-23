@@ -73,7 +73,7 @@ export function EmptyState({
 						<button
 							type="button"
 							onClick={secondaryAction.onClick}
-							className="rounded-xl border border-white/[0.03] bg-black px-4 py-2.5 text-sm font-medium text-slate-400 rounded-xl hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20"
+							className="rounded-xl border border-white/[0.03] bg-black px-4 py-2.5 text-sm font-medium text-slate-400 hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
 						>
 							{secondaryAction.label}
 						</button>

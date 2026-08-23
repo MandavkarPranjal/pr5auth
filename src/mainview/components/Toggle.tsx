@@ -33,11 +33,9 @@ export function Toggle({ checked, onChange, label, description, disabled }: Togg
 				}`}
 			>
 				<span
-					className={`inline-block h-4.5 w-4.5 transform rounded-full transition-colors duration-300 ${
+					className={`inline-block h-4.5 w-4.5 transform rounded-full transition duration-300 ${
 						checked ? "bg-zinc-900" : "bg-white"
-					} transition-transform duration-300 ${
-						checked ? "translate-x-[22px]" : "translate-x-[3px]"
-					}`}
+					} ${checked ? "translate-x-[22px]" : "translate-x-[3px]"}`}
 				/>
 			</span>
 		</button>

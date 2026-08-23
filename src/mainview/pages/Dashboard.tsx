@@ -37,7 +37,7 @@ export function Dashboard({ accounts, onAdd, onDelete, onCopy }: DashboardProps)
 					</div>
 					<button
 						onClick={onAdd}
-						className="flex items-center gap-2 rounded-xl bg-white text-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-neutral-200 active:scale-[0.98]"
+						className="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 transition-all duration-200 hover:bg-neutral-200 active:scale-[0.98]"
 					>
 						<Plus className="h-4 w-4" />
 						Add account

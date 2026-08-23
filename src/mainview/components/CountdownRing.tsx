@@ -36,11 +36,12 @@ export function CountdownRing({ progress, seconds, size = 44 }: CountdownRingPro
 					strokeLinecap="round"
 					strokeDasharray={circumference}
 					strokeDashoffset={(1 - clamped) * circumference}
-					className={`${ringColor}`}
+					stroke={ringColor}
 				/>
 			</svg>
 			<span
-				className={`relative text-xl font-bold leading-none tabular-nums ${textColor}`}
+				className="relative text-xl font-bold leading-none tabular-nums"
+				style={{ color: textColor }}
 			>
 				{seconds}
 			</span>

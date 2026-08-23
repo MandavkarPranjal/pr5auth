@@ -119,7 +119,7 @@ export function LockScreen({ mode, onUnlock, onCreate }: LockScreenProps) {
 					<button
 						type="submit"
 						disabled={loading || (isCreate ? !password || !confirm : !password)}
-						className="flex w-full items-center justify-center gap-2 rounded-xl bg-white text-zinc-900 px-6 py-3 text-sm font-semibold text-white transition-all duration-200 hover:bg-neutral-200 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+						className="flex w-full items-center justify-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-semibold text-zinc-900 transition-all duration-200 hover:bg-neutral-200 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
 					>
 						<ShieldCheck className="h-4 w-4" />
 						{loading ? "Please wait…" : isCreate ? "Create & unlock" : "Unlock vault"}
