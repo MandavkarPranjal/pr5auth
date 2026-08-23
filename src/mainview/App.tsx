@@ -23,6 +23,8 @@ import type { ImportStrategy } from "./services/accountService";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { DashboardSkeleton, PageSkeleton } from "./components/Skeleton";
 import { About } from "./pages/About";
+import { UpdateBanner } from "./components/UpdateBanner";
+import { updateService } from "./services/updateService";
 
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 
@@ -417,6 +419,13 @@ export default function App() {
 		refreshVaultStatus();
 	}, [reload, refreshVaultStatus]);
 
+	// Non-intrusive update check on startup – at most once via bun service + view dedup
+	useEffect(() => {
+		void updateService.checkOnceOnStartup().catch(() => {
+			// Never block startup; update failures are non-fatal
+		})
+	}, [])
+
 	// Don't show storage error banner when vault is locked – it's expected
 	const showError = error && !locked && !vaultLoading;
 
@@ -431,6 +440,11 @@ export default function App() {
 
 			<main className="app-main relative z-10 flex-1 overflow-hidden">
 				<div className="page-scroll h-full overflow-y-auto p-8">
+					{!locked && !vaultLoading && (
+						<div className="mb-4">
+							<UpdateBanner onNavigateToSettings={() => setPage("settings")} />
+						</div>
+					)}
 					{showError && (
 						<div className="mb-4 flex items-start justify-between gap-4 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
 							<div>

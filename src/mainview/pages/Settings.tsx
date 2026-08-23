@@ -1,13 +1,15 @@
-import { useRef, useState } from "react";
-import { Download, Eye, EyeOff, Fingerprint, Info, KeyRound, Lock, ShieldCheck, Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { AlertTriangle, CheckCircle2, Download, Eye, EyeOff, Fingerprint, Info, KeyRound, Loader2, Lock, RefreshCw, ShieldCheck, Upload } from "lucide-react";
 import type { Account, AppSettings } from "../types/account";
 import type { StorageStatus } from "../../shared/storageProvider";
 import type { VaultStatus } from "../../shared/rpcSchema";
+import type { UpdateStatePayload } from "../../shared/rpcSchema";
 import { Toggle } from "../components/Toggle";
 import { exportVault } from "../services/accountService";
 import { changeVaultPassword, lockVault } from "../services/storage";
 import { decryptBackupAsync, encryptBackupAsync, isEncryptedBackup, validateEncryptedBackupStructure } from "../../shared/backupCrypto";
 import { APP_VERSION } from "../constants";
+import { updateService } from "../services/updateService";
 
 interface SettingsProps {
 	accounts: Account[];
@@ -222,6 +224,73 @@ export function Settings({
 	const hasPassword = vaultStatus?.hasPassword ?? false;
 	const isLocked = vaultStatus?.isLocked ?? false;
 
+	// Updates state – subscribes to isolated updateService
+	const [updateState, setUpdateState] = useState<UpdateStatePayload>(() => updateService.getState())
+	const [updateBusy, setUpdateBusy] = useState(false)
+	useEffect(() => {
+		const unsub = updateService.subscribe(setUpdateState)
+		// Ensure we have latest bun state on mount (in case auto-check already ran)
+		void updateService.refreshState().catch(() => {})
+		return unsub
+	}, [])
+
+	const updateStatusLabel: Record<UpdateStatePayload["status"], string> = {
+		idle: "Idle",
+		checking: "Checking…",
+		"no-update": "Up to date",
+		"update-available": "Update available",
+		downloading: "Downloading…",
+		installing: "Installing…",
+		failed: "Failed",
+	}
+
+	async function handleCheckForUpdates() {
+		if (updateBusy || updateState.status === "checking" || updateState.status === "downloading" || updateState.status === "installing") return
+		setUpdateBusy(true)
+		try {
+			await updateService.checkForUpdates(true)
+		} finally {
+			setUpdateBusy(false)
+		}
+	}
+
+	async function handleDownloadUpdate() {
+		if (updateBusy) return
+		setUpdateBusy(true)
+		try {
+			await updateService.downloadUpdate()
+		} finally {
+			setUpdateBusy(false)
+		}
+	}
+
+	async function handleInstallUpdate() {
+		if (updateBusy) return
+		setUpdateBusy(true)
+		try {
+			await updateService.installUpdate()
+		} finally {
+			setUpdateBusy(false)
+		}
+	}
+
+	async function handleUpdateFlow() {
+		if (updateBusy) return
+		setUpdateBusy(true)
+		try {
+			if (updateState.updateReady) {
+				await updateService.installUpdate()
+			} else {
+				const dl = await updateService.downloadUpdate()
+				if (dl.updateReady && !dl.error) {
+					await updateService.installUpdate()
+				}
+			}
+		} finally {
+			setUpdateBusy(false)
+		}
+	}
+
 	return (
 		<div className="flex h-full flex-col overflow-y-auto">
 			<header className="pb-6">
@@ -421,6 +490,163 @@ export function Settings({
 					)}
 				</section>
 
+				<section className="overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02] backdrop-blur-xl">
+					<div className="border-b border-white/[0.06] px-5 py-4">
+						<h3 className="flex items-center gap-2 text-sm font-semibold text-slate-200">
+							<RefreshCw className="h-4 w-4 text-neutral-300" />
+							Updates
+						</h3>
+					</div>
+					<div className="p-5">
+						<div className="flex flex-wrap items-start justify-between gap-4">
+							<div>
+								<p className="text-sm font-medium text-slate-200">Current version</p>
+								<p className="mt-1 font-mono text-sm tabular-nums text-slate-400">{updateState.currentVersion || APP_VERSION}</p>
+								{updateState.channel && (
+									<p className="mt-1 text-xs text-slate-500">Channel: <span className="font-mono">{updateState.channel}</span></p>
+								)}
+								{updateState.checkedAt && (
+									<p className="mt-1 text-xs text-slate-500">Last checked: {new Date(updateState.checkedAt).toLocaleString()}</p>
+								)}
+							</div>
+							<span
+								className={`shrink-0 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+									updateState.status === "update-available"
+										? "border-sky-500/20 bg-sky-500/[0.07] text-sky-300"
+										: updateState.status === "no-update"
+											? "border-emerald-500/20 bg-emerald-500/[0.07] text-emerald-300"
+											: updateState.status === "checking" || updateState.status === "downloading" || updateState.status === "installing"
+												? "border-amber-500/20 bg-amber-500/[0.07] text-amber-300"
+												: updateState.status === "failed"
+													? "border-red-500/20 bg-red-500/[0.07] text-red-300"
+													: "border-white/[0.08] bg-white/[0.03] text-slate-400"
+								}`}
+							>
+								{updateState.status === "checking" && <Loader2 className="h-3 w-3 animate-spin" />}
+								{updateState.status === "downloading" && <Loader2 className="h-3 w-3 animate-spin" />}
+								{updateState.status === "installing" && <Loader2 className="h-3 w-3 animate-spin" />}
+								{updateState.status === "no-update" && <CheckCircle2 className="h-3 w-3" />}
+								{updateState.status === "failed" && <AlertTriangle className="h-3 w-3" />}
+								{updateStatusLabel[updateState.status]}
+							</span>
+						</div>
+
+						{/* Status-specific content – covers all 6 required states */}
+						<div className="mt-4 space-y-3">
+							{updateState.status === "idle" && (
+								<p className="text-xs leading-relaxed text-slate-500">Check for updates to see if a newer version is available. Updates are verified by Electrobun’s built-in security mechanism.</p>
+							)}
+							{updateState.status === "checking" && (
+								<p className="text-xs leading-relaxed text-slate-400">Checking for updates…</p>
+							)}
+							{updateState.status === "no-update" && (
+								<p className="text-xs leading-relaxed text-emerald-300/80">You’re on the latest version.</p>
+							)}
+							{updateState.status === "update-available" && (
+								<div className="rounded-xl border border-sky-500/20 bg-sky-500/[0.06] p-4">
+									<p className="text-sm font-medium text-sky-200">
+										New version available: <span className="font-mono">{updateState.newVersion}</span>
+										<span className="ml-2 font-mono text-xs font-normal text-slate-400">{updateState.currentVersion} → {updateState.newVersion}</span>
+									</p>
+									{updateState.releaseNotes ? (
+										<p className="mt-2 max-h-28 overflow-y-auto whitespace-pre-wrap text-xs leading-relaxed text-slate-300">{updateState.releaseNotes}</p>
+									) : (
+										<p className="mt-1 text-xs text-slate-400">Release notes not available.</p>
+									)}
+									{updateState.updateReady ? (
+										<p className="mt-2 flex items-center gap-1 text-xs text-emerald-300"><CheckCircle2 className="h-3 w-3" /> Downloaded and verified — ready to install.</p>
+									) : (
+										<p className="mt-2 text-xs text-slate-500">Update will be downloaded and verified before installing. PR5Auth will restart when appropriate.</p>
+									)}
+								</div>
+							)}
+							{updateState.status === "downloading" && (
+								<div className="space-y-2">
+									<div className="flex items-center justify-between text-xs text-slate-400">
+										<span>Downloading {updateState.newVersion ? `v${updateState.newVersion}` : "update"}…</span>
+										<span className="font-mono tabular-nums">{typeof updateState.progress === "number" ? `${updateState.progress}%` : "—"}</span>
+									</div>
+									<div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+										<div className="h-full bg-sky-400 transition-all duration-300" style={{ width: `${Math.max(4, Math.min(100, updateState.progress ?? 0))}%` }} />
+									</div>
+									<p className="text-xs text-slate-500">Verified by Electrobun’s built-in update/security mechanism. App remains usable during download.</p>
+								</div>
+							)}
+							{updateState.status === "installing" && (
+								<div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3">
+									<p className="flex items-center gap-2 text-sm font-medium text-amber-200"><Loader2 className="h-4 w-4 animate-spin" /> Installing update…</p>
+									<p className="mt-1 text-xs text-slate-400">PR5Auth will restart automatically. Do not close the app.</p>
+								</div>
+							)}
+							{updateState.status === "failed" && (
+								<div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3">
+									<p className="text-sm font-medium text-red-200">Update failed</p>
+									<p className="mt-1 text-xs leading-relaxed text-red-300/80">{updateState.error ?? "Something went wrong. You can keep using PR5Auth normally."}</p>
+									<p className="mt-2 text-xs text-slate-500">Failures never prevent you from opening or using the app. Try again later.</p>
+								</div>
+							)}
+						</div>
+
+						{/* Actions – always show Check for updates; extra actions per state */}
+						<div className="mt-4 flex flex-wrap gap-2">
+							<button
+								onClick={handleCheckForUpdates}
+								disabled={updateBusy || updateState.status === "checking" || updateState.status === "downloading" || updateState.status === "installing"}
+								className="inline-flex items-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2 text-sm font-medium text-slate-200 hover:bg-white/[0.06] disabled:opacity-50 disabled:cursor-not-allowed"
+							>
+								<RefreshCw className={`h-4 w-4 ${updateState.status === "checking" ? "animate-spin" : ""}`} />
+								{updateState.status === "checking" ? "Checking…" : "Check for updates"}
+							</button>
+
+							{updateState.status === "update-available" && !updateState.updateReady && (
+								<button
+									onClick={handleDownloadUpdate}
+									disabled={updateBusy}
+									className="inline-flex items-center gap-1.5 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-neutral-100 disabled:opacity-50"
+								>
+									<Download className="h-4 w-4" />
+									Download update
+								</button>
+							)}
+
+							{updateState.status === "update-available" && (
+								<button
+									onClick={handleUpdateFlow}
+									disabled={updateBusy}
+									className="inline-flex items-center gap-1.5 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-neutral-100 disabled:opacity-50"
+								>
+									{updateState.updateReady ? <RefreshCw className="h-4 w-4" /> : <Download className="h-4 w-4" />}
+									{updateState.updateReady ? "Restart & install" : "Update"}
+								</button>
+							)}
+
+							{updateState.status === "failed" && (
+								<button
+									onClick={handleCheckForUpdates}
+									disabled={updateBusy}
+									className="inline-flex items-center gap-1.5 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-neutral-100 disabled:opacity-50"
+								>
+									<RefreshCw className="h-4 w-4" />
+									Retry
+								</button>
+							)}
+
+							{(updateState.status === "update-available" && updateState.updateReady) && (
+								<button
+									onClick={handleInstallUpdate}
+									disabled={updateBusy}
+									className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-500/15 disabled:opacity-50"
+								>
+									<CheckCircle2 className="h-4 w-4" />
+									Install now
+								</button>
+							)}
+						</div>
+
+						<p className="mt-3 text-[11px] leading-relaxed text-slate-500">Updates are checked at most once per launch. Use “Check for updates” to check again manually. Never blocks opening or using PR5Auth.</p>
+					</div>
+				</section>
+
 				<section className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5 backdrop-blur-xl">
 					<div className="flex items-start gap-3.5">
 						<div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/10">
@@ -435,7 +661,7 @@ export function Settings({
 							</p>
 							<div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
 								<span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 font-medium tabular-nums text-slate-400">
-									Version {APP_VERSION}
+									Version {updateState.currentVersion || APP_VERSION}
 								</span>
 								<span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 font-medium text-slate-400">
 									Offline-first

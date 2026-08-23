@@ -97,12 +97,41 @@ function connectRpc(): SecureStorageRpcClient | null {
 				"tray:lock": () => {
 					window.dispatchEvent(new CustomEvent("pr5auth:lock"))
 				},
+				"updater:progress": (payload) => {
+					// Forward Electrobun Updater progress to the isolated updateService via window event.
+					// This avoids creating a second Electroview (which would overwrite receiveMessageFromBun).
+					window.dispatchEvent(new CustomEvent("pr5auth:updater-progress", { detail: payload }))
+				},
 			},
 		},
 	})
 	new Electroview({ rpc })
 	sharedRpc = rpc as unknown as SecureStorageRpcClient
 	return sharedRpc
+}
+
+export function getSecureStorageRpc(): SecureStorageRpcClient | null {
+	return connectRpc()
+}
+
+/** Generic RPC accessor for updater – typed via augmentation */
+export function getUpdaterRpc(): {
+	request: {
+		"updater:check": (params: { force?: boolean }) => Promise<import("../../shared/rpcSchema").UpdateCheckResult>
+		"updater:download": () => Promise<import("../../shared/rpcSchema").UpdateCheckResult>
+		"updater:apply": () => Promise<void>
+		"updater:getState": () => Promise<import("../../shared/rpcSchema").UpdateStatePayload>
+	}
+} | null {
+	const rpc = connectRpc() as unknown as {
+		request: {
+			"updater:check": (params: { force?: boolean }) => Promise<import("../../shared/rpcSchema").UpdateCheckResult>
+			"updater:download": () => Promise<import("../../shared/rpcSchema").UpdateCheckResult>
+			"updater:apply": () => Promise<void>
+			"updater:getState": () => Promise<import("../../shared/rpcSchema").UpdateStatePayload>
+		}
+	} | null
+	return rpc as unknown as ReturnType<typeof getUpdaterRpc>
 }
 
 export function getTrayRpc(): SecureStorageRpcClient | null {

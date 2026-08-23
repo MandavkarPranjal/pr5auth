@@ -5,6 +5,40 @@ export interface VaultStatus {
 	isLocked: boolean
 }
 
+export type UpdateStatus =
+	| "idle"
+	| "checking"
+	| "no-update"
+	| "update-available"
+	| "downloading"
+	| "installing"
+	| "failed"
+
+export interface UpdateStatePayload {
+	status: UpdateStatus
+	currentVersion: string
+	newVersion: string | null
+	releaseNotes: string | null
+	error: string | null
+	progress: number | null
+	checkedAt: number | null
+	channel: string | null
+	updateReady: boolean
+}
+
+export interface UpdateCheckResult extends UpdateStatePayload {
+	updateAvailable: boolean
+}
+
+export interface UpdateProgressEvent {
+	status: import("electrobun/bun").UpdateStatusType | UpdateStatus
+	message: string
+	progress?: number
+	bytesDownloaded?: number
+	totalBytes?: number
+	errorMessage?: string
+}
+
 export interface SecureStorageSchema {
 	bun: {
 		requests: {
@@ -30,6 +64,13 @@ export interface SecureStorageSchema {
 				response: void
 			}
 			"vault:reset": { params: undefined; response: void }
+			"updater:check": {
+				params: { force?: boolean }
+				response: UpdateCheckResult
+			}
+			"updater:download": { params: undefined; response: UpdateCheckResult }
+			"updater:apply": { params: undefined; response: void }
+			"updater:getState": { params: undefined; response: UpdateStatePayload }
 		}
 		messages: {}
 	}
@@ -37,6 +78,7 @@ export interface SecureStorageSchema {
 		requests: {}
 		messages: {
 			"tray:lock": { params: undefined }
+			"updater:progress": { params: UpdateProgressEvent }
 		}
 	}
 }

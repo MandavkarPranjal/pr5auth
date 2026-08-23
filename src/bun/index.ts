@@ -5,6 +5,7 @@ import { StorageError } from "../shared/storageProvider";
 import { createSecureStorageBackend, getDataDir } from "./secureStorage";
 import { buildTrayMenu, formatTrayTitle } from "./tray";
 import { SETTINGS_KEY, VAULT_KEY } from "../shared/storageProvider";
+import * as updateService from "./updateService";
 
 const DEV_SERVER_PORT = 5173;
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
@@ -218,6 +219,10 @@ const rpc = BrowserView.defineRPC<SecureStorageSchema>({
 					const vm = getVaultManager()
 					if (vm) await vm.reset()
 				}),
+			"updater:check": async ({ force }) => updateService.checkForUpdate(Boolean(force)),
+			"updater:download": async () => updateService.downloadUpdate(),
+			"updater:apply": async () => updateService.applyUpdate(),
+			"updater:getState": async () => updateService.getState(),
 		},
 	},
 });
@@ -373,6 +378,42 @@ try {
 	}
 } catch {
 	// ignore
+}
+
+// Wire update progress → webview (Electrobun's built-in verification applies during download/apply)
+try {
+	updateService.setProgressSender((event) => {
+		try {
+			// Typed RPC send if available
+			const send = (rpc as unknown as { send?: Record<string, (p: unknown) => void> }).send
+			if (send && typeof send["updater:progress"] === "function") {
+				;(send["updater:progress"] as (p: unknown) => void)(event)
+				return
+			}
+		} catch {
+			// ignore – progress reporting must never break main process
+		}
+		// Fallback: dispatch via JS if RPC unavailable (e.g. early window)
+		try {
+			const view: unknown = mainWindow?.webview
+			if (view && typeof (view as { executeJavascript?: unknown }).executeJavascript === "function") {
+				;(view as { executeJavascript: (js: string) => void }).executeJavascript(
+					`window.dispatchEvent(new CustomEvent('pr5auth:updater-progress', {detail: ${JSON.stringify(event).replace(/</g, "\\u003c")}}))`,
+				)
+			}
+		} catch {
+			// ignore
+		}
+	})
+} catch {
+	// ignore
+}
+
+// Check for updates non-intrusively shortly after startup (at most once per launch; deductible via updateService)
+try {
+	updateService.scheduleStartupCheck(2500)
+} catch {
+	// Never allow update scheduling to prevent startup
 }
 
 console.log("PR5Auth started!");
