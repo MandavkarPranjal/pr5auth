@@ -26,6 +26,7 @@ export default {
     },
     linux: {
       bundleCEF: false,
+      icon: "assets/tray-icon.png",
     },
     win: {
       bundleCEF: false,

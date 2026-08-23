@@ -13,7 +13,7 @@ Run the checks with `bun test` and `bunx tsc --noEmit`.
 
 ## Publishing a release
 
-Create and push a semantic-version tag, for example `v1.0.0`. GitHub Actions builds native packages for Linux x64/ARM64, macOS ARM64, and Windows x64/ARM64, then attaches the artifacts to the generated GitHub Release.
+Create and push a semantic-version tag, for example `v1.0.0`. GitHub Actions builds native packages for Linux x64/ARM64, macOS ARM64, and Windows x64/ARM64, then attaches the artifacts to the generated GitHub Release. Linux releases include an AppImage, a plain `.tar`, and Electrobun's installer/updater archives.
 
 For Windows self-signed certificate setup and rotation, see [docs/windows-signing.md](docs/windows-signing.md).
 
