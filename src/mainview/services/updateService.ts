@@ -251,7 +251,12 @@ class UpdateService {
 				}
 				if (s.updateReady) return { ...this.state }
 				if (s.status === "failed" || s.error) return { ...this.state }
-				if (s.status !== "downloading") return { ...this.state }
+				// Don't return early on non-downloading status: the bun handler
+				// returns optimistically before `currentState` flips to
+				// `downloading`, so an early `update-available` must keep polling
+				// until the background download completes. Only terminal
+				// no-update/idle should exit quickly.
+				if (s.status === "no-update" || s.status === "idle") return { ...this.state }
 			} catch {
 				// ignore transient RPC failures and keep polling
 			}
