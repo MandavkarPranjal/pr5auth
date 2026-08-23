@@ -21,7 +21,7 @@ export function SearchBar({ value, onChange, placeholder = "Search accounts…" 
 				className="w-full rounded-xl border border-white/[0.03] bg-black py-2.5 pl-10 pr-10 text-sm text-white placeholder:text-slate-500 outline-none backdrop-blur-md transition-all duration-200 focus:border-white/30 focus:bg-black focus:shadow-[0_0_0_3px] focus:shadow-white/20"
 			/>
 			{value && (
-<button
+				<button
 					onClick={() => onChange("")}
 					className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-white transition-colors hover:text-white"
 					aria-label="Clear search"

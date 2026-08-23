@@ -140,7 +140,7 @@ export function AddAccountModal({ open, initial, onSave, onCancel }: AddAccountM
 						</button>
 						<button
 							type="submit"
-							className="rounded-xl bg-white text-zinc-900 px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-neutral-200  active:scale-[0.98]"
+							className="rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-zinc-900 transition-all duration-200 hover:bg-neutral-200 active:scale-[0.98]"
 						>
 							Save account
 						</button>

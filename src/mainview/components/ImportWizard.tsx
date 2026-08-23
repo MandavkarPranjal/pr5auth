@@ -244,7 +244,7 @@ export function ImportWizard({ existingAccounts, onImport, onClose }: ImportWiza
 								<button
 									onClick={() => canProceedToPreview && setStep("preview")}
 									disabled={!canProceedToPreview}
-									className="flex items-center gap-2 rounded-xl bg-white text-zinc-900 px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-40"
+									className="flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-zinc-900 transition-all hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-40"
 								>
 									Continue <ChevronRight className="h-4 w-4" />
 								</button>
@@ -399,7 +399,7 @@ export function ImportWizard({ existingAccounts, onImport, onClose }: ImportWiza
 						<button
 							onClick={handleConfirmImport}
 							disabled={importing || (strategy === "merge" && totalUniques === 0 && totalDuplicates > 0)}
-							className="flex items-center gap-2 rounded-xl bg-white text-zinc-900 px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-40"
+							className="flex items-center gap-2 rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-zinc-900 transition-all hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-40"
 						>
 							{importing ? (
 								<>

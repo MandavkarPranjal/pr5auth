@@ -343,7 +343,7 @@ export function Settings({
 									<button
 										type="submit"
 										disabled={vaultLoading}
-										className="rounded-xl bg-white text-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-200 disabled:opacity-50"
+										className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-neutral-200 disabled:opacity-50"
 									>
 										{vaultLoading ? "Updating…" : "Update password"}
 									</button>
@@ -490,7 +490,7 @@ export function Settings({
 								<button
 									onClick={() => void handleExportEncrypted()}
 									disabled={exportLoading}
-									className="rounded-xl bg-white text-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-200 disabled:opacity-50"
+									className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-neutral-200 disabled:opacity-50"
 								>
 									{exportLoading ? "Encrypting…" : "Export"}
 								</button>
@@ -534,7 +534,7 @@ export function Settings({
 								<button
 									onClick={() => void handleRestoreEncrypted()}
 									disabled={restoreLoading}
-									className="rounded-xl bg-white text-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-200 disabled:opacity-50"
+									className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-neutral-200 disabled:opacity-50"
 								>
 									{restoreLoading ? "Decrypting…" : "Restore"}
 								</button>
