@@ -8,6 +8,9 @@ export default {
     version: pkg.version,
   },
   release: {
+    // Stable-only releases via GitHub /releases/latest/download (excludes prereleases).
+    // Canary pipeline removed — previously `canary-<platform>-<arch>-update.json` was
+    // unreachable via /latest because GitHub excludes prereleases from that redirect.
     baseUrl: "https://github.com/MandavkarPranjal/pr5auth/releases/latest/download",
   },
   build: {

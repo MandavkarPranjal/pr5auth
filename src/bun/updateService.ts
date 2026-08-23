@@ -90,8 +90,7 @@ function buildStateFromCheck(
 	let status: UpdateStatePayload["status"]
 	if (hasError) status = "failed"
 	else if (updateAvailable) status = "update-available"
-	else if (hasCheckedThisLaunch) status = "no-update"
-	else status = "idle"
+	else status = "no-update"
 
 	const result: UpdateCheckResult = {
 		status,
@@ -194,16 +193,44 @@ export async function checkForUpdate(force = false): Promise<UpdateCheckResult> 
 
 export async function downloadUpdate(): Promise<UpdateCheckResult> {
 	if (downloadingPromise) return downloadingPromise
-
-	// Ensure we have a check result; if not, check first (but respect dedup)
-	if (!lastCheckResult?.updateAvailable) {
-		const check = await checkForUpdate(false)
-		if (!check.updateAvailable) {
-			return check
+	// If already downloaded and verified, return ready state without re-downloading
+	if (currentState.updateReady) {
+		const ready: UpdateCheckResult = {
+			...(lastCheckResult ?? buildStateFromCheck(currentState.currentVersion, currentState.channel ?? "", null)),
+			status: "update-available",
+			currentVersion: currentState.currentVersion,
+			newVersion: currentState.newVersion,
+			releaseNotes: currentState.releaseNotes,
+			error: null,
+			progress: 100,
+			checkedAt: currentState.checkedAt ?? Date.now(),
+			channel: currentState.channel,
+			updateAvailable: true,
+			updateReady: true,
 		}
+		return ready
 	}
 
 	downloadingPromise = (async () => {
+		// Ensure we have a check result; if not, check first (but respect dedup)
+		// This check is inside the deduped promise so concurrent callers don't race to create two downloads
+		if (!lastCheckResult?.updateAvailable) {
+			const check = await checkForUpdate(false)
+			if (!check.updateAvailable) {
+				return check
+			}
+		}
+		// Re-check ready after awaiting the check – another caller may have completed download
+		if (currentState.updateReady) {
+			return {
+				...lastCheckResult!,
+				status: "update-available",
+				progress: 100,
+				updateReady: true,
+				checkedAt: currentState.checkedAt ?? Date.now(),
+				error: null,
+			}
+		}
 		const local = await getLocalInfoSafe()
 		currentState = {
 			...currentState,
@@ -310,6 +337,7 @@ export async function downloadUpdate(): Promise<UpdateCheckResult> {
 				checkedAt: Date.now(),
 				error: null,
 			}
+			lastCheckResult = success
 			return success
 		} catch (err) {
 			const msg = mapUpdaterError(err)
