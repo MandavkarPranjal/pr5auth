@@ -90,7 +90,7 @@ function connectRpc(): SecureStorageRpcClient | null {
 		return sharedRpc
 	}
 	const rpc = Electroview.defineRPC<SecureStorageSchema>({
-		maxRequestTime: 300000,
+		maxRequestTime: 30000,
 		handlers: {
 			requests: {},
 			messages: {

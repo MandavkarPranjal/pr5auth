@@ -128,7 +128,7 @@ function hideWindow() {
 }
 
 const rpc = BrowserView.defineRPC<SecureStorageSchema>({
-	maxRequestTime: 300000,
+	maxRequestTime: 30000,
 	handlers: {
 		requests: {
 			"storage:getItem": async ({ key }) => storageBackend.getItem(key),
@@ -220,7 +220,25 @@ const rpc = BrowserView.defineRPC<SecureStorageSchema>({
 					if (vm) await vm.reset()
 				}),
 			"updater:check": async ({ force }) => updateService.checkForUpdate(Boolean(force)),
-			"updater:download": async () => updateService.downloadUpdate(),
+			"updater:download": async () => {
+				// Avoid 5-minute global RPC timeout: keep 30s for vault/storage,
+				// spawn long download in background and return quickly (<30s).
+				const before = updateService.getState()
+				if (before.updateReady) {
+					return { ...before, updateAvailable: true, updateReady: true, checkedAt: before.checkedAt ?? Date.now() } as import("../shared/rpcSchema").UpdateCheckResult
+				}
+				void updateService.downloadUpdate().catch(() => {})
+				// Optimistic downloading state for fast RPC response; real progress via updater:progress
+				return {
+					...before,
+					status: "downloading" as const,
+					progress: 0,
+					error: null,
+					checkedAt: Date.now(),
+					updateAvailable: Boolean(before.newVersion),
+					updateReady: false,
+				} as import("../shared/rpcSchema").UpdateCheckResult
+			},
 			"updater:apply": async () => updateService.applyUpdate(),
 			"updater:getState": async () => updateService.getState(),
 		},
