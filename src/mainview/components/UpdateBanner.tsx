@@ -40,11 +40,14 @@ export function UpdateBanner({ onNavigateToSettings }: UpdateBannerProps) {
 		if (actionBusy) return
 		setActionBusy(true)
 		try {
-			// First download; if already ready, download will return quickly with updateReady=true
+			// First download; if already ready, download will return quickly with updateReady=true.
+			// The bun handler returns optimistically (fire-and-forget) to avoid
+			// the 30s RPC timeout, so downloadUpdate() polls updater:getState
+			// until updateReady becomes true.
 			const dl = await updateService.downloadUpdate()
-			if (dl.status === "failed") return
-			// If download succeeded and update is ready, install
-			if (dl.updateReady || dl.status === "update-available") {
+			if (dl.status === "failed" || dl.error) return
+			// Only install when the download is verified and ready
+			if (dl.updateReady) {
 				await updateService.installUpdate()
 			}
 		} finally {
