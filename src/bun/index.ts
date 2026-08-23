@@ -128,7 +128,7 @@ function hideWindow() {
 }
 
 const rpc = BrowserView.defineRPC<SecureStorageSchema>({
-	maxRequestTime: 30000,
+	maxRequestTime: 300000,
 	handlers: {
 		requests: {
 			"storage:getItem": async ({ key }) => storageBackend.getItem(key),

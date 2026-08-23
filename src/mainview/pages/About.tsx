@@ -1,21 +1,10 @@
-import { useEffect, useState } from "react";
 import { ShieldCheck, Sparkles } from "lucide-react";
 import { APP_VERSION } from "../constants";
-import { updateService } from "../services/updateService";
+import { useLiveVersion } from "../hooks/useUpdateState";
 
 export function About() {
-	const [liveVersion, setLiveVersion] = useState(APP_VERSION);
-	useEffect(() => {
-		const s = updateService.getState();
-		if (s.currentVersion) setLiveVersion(s.currentVersion);
-		const unsub = updateService.subscribe((st) => {
-			if (st.currentVersion) setLiveVersion(st.currentVersion);
-		});
-		void updateService.refreshState().then((st) => {
-			if (st.currentVersion) setLiveVersion(st.currentVersion);
-		}).catch(() => {});
-		return unsub;
-	}, []);
+	const liveVersionRaw = useLiveVersion();
+	const liveVersion = liveVersionRaw || APP_VERSION;
 	return (
 		<div className="flex h-full flex-col overflow-y-auto">
 			<header className="pb-6">

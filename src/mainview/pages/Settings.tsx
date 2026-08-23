@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Download, Eye, EyeOff, Fingerprint, Info, KeyRound, Loader2, Lock, RefreshCw, ShieldCheck, Upload } from "lucide-react";
 import type { Account, AppSettings } from "../types/account";
 import type { StorageStatus } from "../../shared/storageProvider";
@@ -10,6 +10,7 @@ import { changeVaultPassword, lockVault } from "../services/storage";
 import { decryptBackupAsync, encryptBackupAsync, isEncryptedBackup, validateEncryptedBackupStructure } from "../../shared/backupCrypto";
 import { APP_VERSION } from "../constants";
 import { updateService } from "../services/updateService";
+import { useUpdateState } from "../hooks/useUpdateState";
 
 interface SettingsProps {
 	accounts: Account[];
@@ -224,15 +225,9 @@ export function Settings({
 	const hasPassword = vaultStatus?.hasPassword ?? false;
 	const isLocked = vaultStatus?.isLocked ?? false;
 
-	// Updates state – subscribes to isolated updateService
-	const [updateState, setUpdateState] = useState<UpdateStatePayload>(() => updateService.getState())
+	// Updates state – shared hook deduplicates subscription/refresh (see useUpdateState)
+	const updateState = useUpdateState()
 	const [updateBusy, setUpdateBusy] = useState(false)
-	useEffect(() => {
-		const unsub = updateService.subscribe(setUpdateState)
-		// Ensure we have latest bun state on mount (in case auto-check already ran)
-		void updateService.refreshState().catch(() => {})
-		return unsub
-	}, [])
 
 	const updateStatusLabel: Record<UpdateStatePayload["status"], string> = {
 		idle: "Idle",
@@ -631,16 +626,7 @@ export function Settings({
 								</button>
 							)}
 
-							{(updateState.status === "update-available" && updateState.updateReady) && (
-								<button
-									onClick={handleInstallUpdate}
-									disabled={updateBusy}
-									className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-500/15 disabled:opacity-50"
-								>
-									<CheckCircle2 className="h-4 w-4" />
-									Install now
-								</button>
-							)}
+
 						</div>
 
 						<p className="mt-3 text-[11px] leading-relaxed text-slate-500">Updates are checked at most once per launch. Use “Check for updates” to check again manually. Never blocks opening or using PR5Auth.</p>

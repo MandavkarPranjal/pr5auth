@@ -1,8 +1,7 @@
-import { useEffect, useState } from "react";
 import { Info, LayoutGrid, QrCode, Settings, ShieldCheck } from "lucide-react";
 import type { Page } from "../types/account";
 import { APP_VERSION } from "../constants";
-import { updateService } from "../services/updateService";
+import { useLiveVersion } from "../hooks/useUpdateState";
 
 interface SidebarProps {
 	page: Page;
@@ -19,19 +18,8 @@ const NAV_ITEMS: { page: Page; label: string; icon: typeof LayoutGrid }[] = [
 ];
 
 export function Sidebar({ page, onNavigate, accountCount, locked }: SidebarProps) {
-	const [liveVersion, setLiveVersion] = useState(APP_VERSION);
-	useEffect(() => {
-		const s = updateService.getState();
-		if (s.currentVersion) setLiveVersion(s.currentVersion);
-		const unsub = updateService.subscribe((st) => {
-			if (st.currentVersion) setLiveVersion(st.currentVersion);
-		});
-		// Refresh from bun (Updater.getLocalInfo) so version updates after Electrobun update/relaunch
-		void updateService.refreshState().then((st) => {
-			if (st.currentVersion) setLiveVersion(st.currentVersion);
-		}).catch(() => {});
-		return unsub;
-	}, []);
+	const liveVersionRaw = useLiveVersion();
+	const liveVersion = liveVersionRaw || APP_VERSION;
 	return (
 		<aside className="app-sidebar flex h-full w-60 shrink-0 flex-col border-r border-white/[0.03] bg-black">
 			<div className="flex items-center gap-3 px-5 pt-6 pb-8">

@@ -32,14 +32,17 @@ class UpdateService {
 	private progressListeners = new Set<ProgressListener>()
 	private hasAutoChecked = false
 	private progressBound = false
+	private progressHandler: EventListener | null = null
+	private installingPromise: Promise<void> | null = null
 
 	private ensureProgressListener() {
 		if (this.progressBound) return
 		this.progressBound = true
 		if (typeof window !== "undefined") {
-			window.addEventListener("pr5auth:updater-progress", ((e: CustomEvent<UpdateProgressEvent>) => {
+			this.progressHandler = ((e: CustomEvent<UpdateProgressEvent>) => {
 				if (e.detail) this.handleProgress(e.detail)
-			}) as EventListener)
+			}) as EventListener
+			window.addEventListener("pr5auth:updater-progress", this.progressHandler)
 		}
 	}
 
@@ -210,6 +213,7 @@ class UpdateService {
 	}
 
 	async installUpdate(): Promise<void> {
+		if (this.installingPromise) return this.installingPromise
 		const rpc = this.getRpc()
 		if (!rpc) {
 			const failed: UpdateStatePayload = { ...this.state, status: "failed", error: "Updates unavailable outside desktop app." }
@@ -218,13 +222,20 @@ class UpdateService {
 			return
 		}
 		this.setState({ status: "installing", error: null })
+		this.installingPromise = (async () => {
+			try {
+				await rpc.request["updater:apply"]()
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : String(err)
+				const failed: UpdateStatePayload = { ...this.state, status: "failed", error: msg }
+				this.state = failed
+				for (const cb of this.listeners) cb({ ...failed })
+			}
+		})()
 		try {
-			await rpc.request["updater:apply"]()
-		} catch (err) {
-			const msg = err instanceof Error ? err.message : String(err)
-			const failed: UpdateStatePayload = { ...this.state, status: "failed", error: msg }
-			this.state = failed
-			for (const cb of this.listeners) cb({ ...failed })
+			return await this.installingPromise
+		} finally {
+			this.installingPromise = null
 		}
 	}
 
@@ -244,6 +255,15 @@ class UpdateService {
 	}
 
 	resetForTests() {
+		if (this.progressHandler && typeof window !== "undefined") {
+			try {
+				window.removeEventListener("pr5auth:updater-progress", this.progressHandler)
+			} catch {
+				// ignore
+			}
+		}
+		this.progressHandler = null
+		this.installingPromise = null
 		this.state = { ...INITIAL_STATE }
 		this.hasAutoChecked = false
 		this.listeners.clear()
