@@ -1,7 +1,21 @@
+import { useEffect, useState } from "react";
 import { ShieldCheck, Sparkles } from "lucide-react";
 import { APP_VERSION } from "../constants";
+import { updateService } from "../services/updateService";
 
 export function About() {
+	const [liveVersion, setLiveVersion] = useState(APP_VERSION);
+	useEffect(() => {
+		const s = updateService.getState();
+		if (s.currentVersion) setLiveVersion(s.currentVersion);
+		const unsub = updateService.subscribe((st) => {
+			if (st.currentVersion) setLiveVersion(st.currentVersion);
+		});
+		void updateService.refreshState().then((st) => {
+			if (st.currentVersion) setLiveVersion(st.currentVersion);
+		}).catch(() => {});
+		return unsub;
+	}, []);
 	return (
 		<div className="flex h-full flex-col overflow-y-auto">
 			<header className="pb-6">
@@ -20,7 +34,7 @@ export function About() {
 						</div>
 					</div>
 					<div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
-						{[["Version", APP_VERSION], ["Privacy", "Local only"], ["License", "Open source"]].map(([label, value]) => (
+						{[["Version", liveVersion], ["Privacy", "Local only"], ["License", "Open source"]].map(([label, value]) => (
 							<div key={label} className="rounded-xl border border-white/[0.03] bg-black/[0.03] p-3">
 								<p className="text-[10px] font-semibold uppercase tracking-wider text-white">{label}</p>
 								<p className="mt-1 text-sm font-medium text-slate-400">{value}</p>
